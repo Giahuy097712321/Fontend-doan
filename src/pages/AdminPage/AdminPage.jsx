@@ -6,12 +6,14 @@ import {
     UserOutlined,
     AppstoreOutlined,
     ShoppingCartOutlined,
-    DashboardOutlined
+    DashboardOutlined,
+    MessageOutlined  // Thêm icon chat
 } from '@ant-design/icons';
 import HeaderComponent from './../../components/HeaderComponent/HeaderComponent';
 import AdminUser from './../../components/AdminUser/AdminUser';
 import AdminProduct from './../../components/AdminProduct/AdminProduct';
 import AdminOrder from './../../components/AdminOrder/AdminOrder';
+import AdminChat from './../../components/AdminChat/AdminChat';  // Thêm component chat
 
 const { Sider, Content } = Layout;
 
@@ -24,6 +26,7 @@ const AdminPage = () => {
         getItem('Quản lý người dùng', 'user', <UserOutlined />),
         getItem('Quản lý sản phẩm', 'product', <AppstoreOutlined />),
         getItem('Quản lý đơn hàng', 'order', <ShoppingCartOutlined />),
+        getItem('Quản lý Chat', 'chat', <MessageOutlined />),  // Thêm menu chat
     ];
 
     const [keySelected, setKeySelected] = useState('user');
@@ -37,6 +40,8 @@ const AdminPage = () => {
                 return <AdminProduct />;
             case 'order':
                 return <AdminOrder />;
+            case 'chat':
+                return <AdminChat />;  // Thêm case chat
             default:
                 return <></>;
         }
