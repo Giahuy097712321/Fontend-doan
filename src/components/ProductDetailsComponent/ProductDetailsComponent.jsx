@@ -1,6 +1,7 @@
-import { Col, Row, Rate } from 'antd';
+// src/components/ProductDetailsComponent/ProductDetailsComponent.jsx
+import { Col, Row, Rate, Tabs } from 'antd';
 import React, { useState } from 'react';
-import { MinusOutlined, PlusOutlined, SafetyCertificateOutlined, TruckOutlined, SyncOutlined } from '@ant-design/icons';
+import { MinusOutlined, PlusOutlined, SafetyCertificateOutlined, TruckOutlined, SyncOutlined, FileTextOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import * as ProductService from '../../services/ProductService';
 import Loading from './../LoadingComponent/Loading';
 import ButtonComponent from './../ButtonComponent/ButtonComponent';
@@ -18,7 +19,10 @@ import {
     WrapperPolicyItem,
     WrapperButtonGroup,
     WrapperProductImage,
-    WrapperProductInfo
+    WrapperProductInfo,
+    WrapperDescription,
+    WrapperTabsContainer,
+    WrapperEmptyDescription
 } from './style';
 import { useQuery } from '@tanstack/react-query';
 import { useSelector, useDispatch } from 'react-redux';
@@ -27,7 +31,7 @@ import { converPrice, initFacebookSDK } from './../../utils';
 import { message } from 'antd';
 import LikeButtonComponent from './../LikeButtonComponent/LikeButtonComponent';
 import CommentComponent from './../CommentComponent/CommentComponent';
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 
 const ProductDetailsComponent = ({ idProduct }) => {
 
@@ -35,6 +39,7 @@ const ProductDetailsComponent = ({ idProduct }) => {
     const location = useLocation();
     const dispatch = useDispatch()
     const [numProduct, setNumProduct] = useState(1);
+    const [activeTab, setActiveTab] = useState('description');
     const user = useSelector((state) => state.user)
     const onChange = (value) => {
         if (value >= 1) setNumProduct(Number(value));
@@ -83,6 +88,78 @@ const ProductDetailsComponent = ({ idProduct }) => {
             message.success('Sản phẩm đã được thêm vào giỏ hàng!');
         }
     }
+
+    // Format mô tả thành các đoạn văn
+    const formatDescription = (description) => {
+        if (!description) {
+            return (
+                <WrapperEmptyDescription>
+                    <InfoCircleOutlined className="empty-icon" />
+                    <p>Chưa có mô tả cho sản phẩm này</p>
+                </WrapperEmptyDescription>
+            );
+        }
+
+        // Tách description thành các đoạn dựa trên dấu xuống dòng
+        const paragraphs = description.split('\n').filter(para => para.trim() !== '');
+
+        return (
+            <div className="description-content">
+                {paragraphs.map((paragraph, index) => (
+                    <p key={index}>
+                        {paragraph}
+                    </p>
+                ))}
+            </div>
+        );
+    };
+
+    const tabItems = [
+        {
+            key: 'description',
+            label: (
+                <span>
+                    <FileTextOutlined />
+                    Mô tả sản phẩm
+                </span>
+            ),
+            children: (
+                <WrapperDescription>
+                    {formatDescription(productDetails?.description)}
+
+                    {/* Thông số kỹ thuật nếu có */}
+                    {productDetails?.specifications && Object.keys(productDetails.specifications).length > 0 && (
+                        <div className="specifications">
+                            <h3>Thông số kỹ thuật</h3>
+                            <div className="specs-list">
+                                {Object.entries(productDetails.specifications).map(([key, value]) => (
+                                    <div key={key} className="spec-item">
+                                        <span className="spec-key">{key}:</span>
+                                        <span className="spec-value">{value}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </WrapperDescription>
+            ),
+        },
+        {
+            key: 'comments',
+            label: `Bình luận (${productDetails?.commentCount || 0})`,
+            children: (
+                <CommentComponent
+                    datainer={
+                        process.env.REACT_APP_IS_LOCAL === "true"
+                            ? "https://developers.facebook.com/docs/plugins/comments#configurator"
+                            : window.location.href
+                    }
+                    width="100%"
+                    numPosts={5}
+                />
+            ),
+        },
+    ];
 
     return (
         <Loading isLoading={isLoading}>
@@ -162,7 +239,9 @@ const ProductDetailsComponent = ({ idProduct }) => {
                                         border: 'none',
                                         background: 'transparent',
                                         cursor: numProduct <= 1 ? 'not-allowed' : 'pointer',
-                                        opacity: numProduct <= 1 ? 0.5 : 1
+                                        opacity: numProduct <= 1 ? 0.5 : 1,
+                                        padding: '4px 8px',
+                                        borderRadius: '4px'
                                     }}
                                     onClick={() => handleChangeCount('decrease')}
                                     disabled={numProduct <= 1}
@@ -179,7 +258,9 @@ const ProductDetailsComponent = ({ idProduct }) => {
                                     style={{
                                         border: 'none',
                                         background: 'transparent',
-                                        cursor: 'pointer'
+                                        cursor: 'pointer',
+                                        padding: '4px 8px',
+                                        borderRadius: '4px'
                                     }}
                                     onClick={() => handleChangeCount('increase')}
                                 >
@@ -196,7 +277,7 @@ const ProductDetailsComponent = ({ idProduct }) => {
                                 styleButton={{
                                     background: 'linear-gradient(135deg, #d70018 0%, #ff4757 100%)',
                                     height: '50px',
-                                    width: '200px',
+                                    width: '100%',
                                     border: 'none',
                                     borderRadius: '6px',
                                     boxShadow: '0 4px 12px rgba(215, 0, 24, 0.3)'
@@ -209,39 +290,21 @@ const ProductDetailsComponent = ({ idProduct }) => {
                                     fontWeight: '600'
                                 }}
                             />
-                            <ButtonComponent
-                                variant="borderless"
-                                size={40}
-                                styleButton={{
-                                    background: '#fff',
-                                    height: '50px',
-                                    width: '200px',
-                                    border: '2px solid #d70018',
-                                    borderRadius: '6px',
-                                }}
-                                textButton={'Mua ngay'}
-                                styleTextButton={{
-                                    color: '#d70018',
-                                    fontSize: '16px',
-                                    fontWeight: '600'
-                                }}
-                            />
                         </WrapperButtonGroup>
                     </WrapperProductInfo>
                 </Col>
             </Row>
 
-            {/* Phần bình luận */}
-            <div style={{ marginTop: '20px' }}>
-                <CommentComponent
-                    datainer={
-                        process.env.REACT_APP_IS_LOCAL === "true"
-                            ? "https://developers.facebook.com/docs/plugins/comments#configurator"
-                            : window.location.href
-                    }
-                    width="100%"
-                    numPosts={5}
-                />
+            {/* Phần mô tả và bình luận - Sử dụng Tabs */}
+            <div style={{ marginTop: '20px', background: '#fff', borderRadius: '8px', padding: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+                <WrapperTabsContainer>
+                    <Tabs
+                        activeKey={activeTab}
+                        onChange={setActiveTab}
+                        items={tabItems}
+                        size="large"
+                    />
+                </WrapperTabsContainer>
             </div>
         </Loading>
     );
