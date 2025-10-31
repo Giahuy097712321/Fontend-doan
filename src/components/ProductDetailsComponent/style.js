@@ -1,4 +1,5 @@
-import { Image, Col, InputNumber } from 'antd';
+// src/components/ProductDetailsComponent/style.js
+import { Image, Col, InputNumber, Tabs } from 'antd';
 import { styled } from 'styled-components';
 
 export const WrapperProductImage = styled(Image)`
@@ -124,4 +125,122 @@ export const WrapperButtonGroup = styled.div`
     @media (max-width: 768px) {
         flex-direction: column;
     }
+`;
+
+// Thêm các styled components mới cho phần mô tả
+export const WrapperDescription = styled.div`
+  padding: 20px;
+  
+  .description-content {
+    line-height: 1.6;
+    color: #333;
+    font-size: 14px;
+    
+    p {
+      margin-bottom: 16px;
+      text-align: justify;
+    }
+  }
+  
+  .specifications {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid #e8e8e8;
+    
+    h3 {
+      color: #d70018;
+      margin-bottom: 16px;
+      font-size: 18px;
+      font-weight: 600;
+    }
+    
+    .specs-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    
+    .spec-item {
+      display: flex;
+      padding: 12px 0;
+      border-bottom: 1px solid #f0f0f0;
+      
+      &:last-child {
+        border-bottom: none;
+      }
+      
+      .spec-key {
+        font-weight: 600;
+        min-width: 200px;
+        color: #666;
+        font-size: 14px;
+      }
+      
+      .spec-value {
+        color: #333;
+        flex: 1;
+        font-size: 14px;
+      }
+    }
+  }
+`;
+
+export const WrapperTabsContainer = styled.div`
+  .ant-tabs {
+    .ant-tabs-nav {
+      margin-bottom: 0;
+      
+      .ant-tabs-tab {
+        padding: 16px 32px;
+        font-weight: 600;
+        font-size: 16px;
+        
+        &:hover {
+          color: #d70018;
+        }
+        
+        .anticon {
+          margin-right: 8px;
+        }
+      }
+      
+      .ant-tabs-tab-active {
+        .ant-tabs-tab-btn {
+          color: #d70018;
+          font-weight: 700;
+        }
+      }
+      
+      .ant-tabs-ink-bar {
+        background: #d70018;
+        height: 3px;
+      }
+    }
+    
+    .ant-tabs-content {
+      padding: 24px 0;
+      min-height: 200px;
+    }
+    
+    .ant-tabs-tabpane {
+      padding: 0 8px;
+    }
+  }
+`;
+
+export const WrapperEmptyDescription = styled.div`
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
+  
+  .empty-icon {
+    font-size: 48px;
+    color: #ccc;
+    margin-bottom: 16px;
+  }
+  
+  p {
+    font-size: 16px;
+    margin: 0;
+  }
 `;
