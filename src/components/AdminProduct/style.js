@@ -2,136 +2,178 @@
 import styled from "styled-components";
 import { Upload } from 'antd';
 
-// Header trang
+export const DashboardContainer = styled.div`
+  padding: 24px;
+  background: #f5f5f5;
+  min-height: 100vh;
+`;
+
 export const WrapperHeader = styled.h1`
   color: #1f2937;
-  font-size: 24px;
-  font-weight: 600;
-  margin-bottom: 20px;
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 24px;
   text-align: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 `;
 
-// Upload file ảnh
-export const WrapperUploadFile = styled(Upload)`
-  & .ant-upload.ant-upload-select.ant-upload-select-picture-card {
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
-    border: 2px dashed #d1d5db;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.3s ease;
+export const StatsContainer = styled.div`
+  margin-bottom: 32px;
+  
+  .ant-card {
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border: none;
+    transition: transform 0.2s ease;
+    
     &:hover {
-      border-color: #2563eb;
-      background-color: #f0f9ff;
+      transform: translateY(-2px);
     }
   }
-`;
-
-// Container cho các card thông tin
-export const InfoCardContainer = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
-  margin-bottom: 30px;
-`;
-
-export const InfoCard = styled.div`
-  background: #fff;
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  text-align: center;
-  border: 1px solid #e8e8e8;
-  transition: transform 0.2s ease;
-
-  &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  
+  .ant-statistic-title {
+    font-size: 14px;
+    color: #666;
+    font-weight: 500;
+  }
+  
+  .ant-statistic-content {
+    font-size: 24px;
+    font-weight: 600;
   }
 `;
 
-export const InfoNumber = styled.div`
-  font-size: 24px;
-  font-weight: 600;
-  color: #1890ff;
-  margin-bottom: 8px;
-`;
-
-export const InfoLabel = styled.div`
-  font-size: 14px;
-  color: #666;
-  font-weight: 500;
-`;
-
-// Container cho biểu đồ
-export const ChartContainer = styled.div`
-  display: flex;
-  gap: 20px;
-  margin-bottom: 30px;
-  flex-wrap: wrap;
-  justify-content: center;
+export const ChartGrid = styled.div`
+  margin-bottom: 32px;
 `;
 
 export const ChartCard = styled.div`
   background: #fff;
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e8e8e8;
-  min-width: 350px;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border: none;
+  height: 100%;
+  transition: transform 0.2s ease;
+  
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+  }
 `;
 
 export const ChartTitle = styled.h3`
-  text-align: center;
-  margin-bottom: 15px;
-  color: #333;
+  color: #1f2937;
+  font-size: 16px;
   font-weight: 600;
-`;
-
-// Table wrapper
-export const TableWrapper = styled.div`
-  margin-top: 20px;
-  background: #fff;
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-
-  .ant-table-thead > tr > th {
-    background: #f5f5f5;
-    font-weight: 600;
-  }
-
-  .ant-table-tbody > tr:hover {
-    background-color: #e6f7ff;
-  }
-
-  .ant-checkbox-wrapper {
-    margin-right: 8px;
-  }
-`;
-
-// Button thêm sản phẩm (giữ lại nhưng không dùng trong layout mới)
-export const WrapperAddButton = styled.div`
-  display: flex;
-  justify-content: center;
   margin-bottom: 20px;
-  button {
-    width: 150px;
-    height: 150px;
-    border-radius: 12px;
-    border: 2px dashed #9ca3af;
+  text-align: center;
+  border-bottom: 2px solid #f0f0f0;
+  padding-bottom: 12px;
+`;
+
+export const TableWrapper = styled.div`
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  
+  .ant-table-thead > tr > th {
+    background: #f8f9fa;
+    font-weight: 600;
+    color: #1f2937;
+    border-bottom: 2px solid #e5e7eb;
+  }
+  
+  .ant-table-tbody > tr:hover > td {
+    background-color: #f0f9ff !important;
+  }
+  
+  .ant-table-container {
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  
+  .ant-pagination {
+    margin-top: 20px;
+  }
+`;
+
+export const WrapperUploadFile = styled(Upload)`
+  & .ant-upload.ant-upload-select.ant-upload-select-picture-card {
+    width: 80px;
+    height: 80px;
+    border-radius: 8px;
+    border: 2px dashed #d1d5db;
+    background: #fafafa;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 60px;
-    color: #2563eb;
     transition: all 0.3s ease;
+    
     &:hover {
-      background-color: #e0f2fe;
-      border-color: #3b82f6;
-      color: #1e40af;
+      border-color: #1890ff;
+      background: #f0f9ff;
+    }
+  }
+  
+  .ant-upload-list-item-container {
+    display: none;
+  }
+`;
+
+export const ActionButtons = styled.div`
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  
+  .ant-btn {
+    border-radius: 6px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+`;
+
+// Responsive adjustments
+export const ResponsiveStyles = styled.div`
+  @media (max-width: 768px) {
+    ${DashboardContainer} {
+      padding: 16px;
+    }
+    
+    ${WrapperHeader} {
+      font-size: 24px;
+    }
+    
+    ${ChartCard} {
+      padding: 16px;
+    }
+    
+    ${TableWrapper} {
+      padding: 16px;
+      overflow-x: auto;
+    }
+    
+    .ant-table-wrapper {
+      overflow-x: auto;
+    }
+  }
+  
+  @media (max-width: 576px) {
+    ${StatsContainer} {
+      .ant-col {
+        margin-bottom: 16px;
+      }
+    }
+    
+    ${ActionButtons} {
+      flex-direction: column;
+      gap: 4px;
     }
   }
 `;
