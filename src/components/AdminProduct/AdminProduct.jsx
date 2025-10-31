@@ -1,18 +1,17 @@
 // AdminProduct.jsx
-import { Button, Form, Select, Input } from 'antd';
-import { PlusOutlined, DeleteOutlined, EditOutlined, SearchOutlined } from '@ant-design/icons';
+import { Button, Form, Select, Input, Row, Col, Card, Statistic } from 'antd';
+import { PlusOutlined, DeleteOutlined, EditOutlined, SearchOutlined, ShoppingOutlined, StarOutlined, StockOutlined, AppstoreOutlined } from '@ant-design/icons';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   WrapperHeader,
   WrapperUploadFile,
   TableWrapper,
-  InfoCardContainer,
-  InfoCard,
-  InfoNumber,
-  InfoLabel,
-  ChartContainer,
+  DashboardContainer,
+  StatsContainer,
+  ChartGrid,
   ChartCard,
-  ChartTitle
+  ChartTitle,
+  ActionButtons
 } from './style';
 
 import TableComponent from '../TableComponent/TableComponent';
@@ -29,14 +28,12 @@ import ModalComponent from './../ModalComponent/ModalComponent';
 import { renderOptions } from '../../utils';
 import { Empty } from 'antd';
 import {
-  PieChart, Pie, Cell, Tooltip, Legend,
+  PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  LineChart, Line, AreaChart, Area, ResponsiveContainer
+  LineChart, Line, AreaChart, Area, ComposedChart
 } from 'recharts';
 
-const COLORS_TYPE = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
-const COLORS_PRICE = ['#8884d8', '#82ca9d'];
-const COLORS_RATING = ['#ff7300', '#387908'];
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D', '#FF6B6B', '#4ECDC4'];
 
 const AdminProduct = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -117,6 +114,13 @@ const AdminProduct = () => {
     return (total / products.data.length).toFixed(1);
   }, [products]);
 
+  const totalTypes = useMemo(() => {
+    if (!products?.data) return 0;
+    const types = new Set(products.data.map(product => product.type).filter(Boolean));
+    return types.size;
+  }, [products]);
+
+  // Biểu đồ phân bố loại sản phẩm
   const typeChartData = useMemo(() => {
     if (!products?.data) return [];
     const grouped = {};
@@ -124,11 +128,15 @@ const AdminProduct = () => {
       const type = product.type || 'Khác';
       grouped[type] = (grouped[type] || 0) + 1;
     });
-    return Object.keys(grouped).map(key => ({ name: key, count: grouped[key] }));
+    return Object.keys(grouped).map((key, index) => ({
+      name: key,
+      value: grouped[key],
+      fill: COLORS[index % COLORS.length]
+    })).sort((a, b) => b.value - a.value);
   }, [products]);
 
-  // Biểu đồ giá sản phẩm theo loại
-  const priceByTypeChartData = useMemo(() => {
+  // Biểu đồ giá và tồn kho theo loại
+  const priceStockChartData = useMemo(() => {
     if (!products?.data) return [];
     const grouped = {};
     products.data.forEach(product => {
@@ -136,24 +144,29 @@ const AdminProduct = () => {
       if (!grouped[type]) {
         grouped[type] = {
           name: type,
-          avgPrice: 0,
-          count: 0,
-          totalPrice: 0
+          totalPrice: 0,
+          totalStock: 0,
+          count: 0
         };
       }
       grouped[type].count += 1;
       grouped[type].totalPrice += (product.price || 0);
+      grouped[type].totalStock += (product.countInStock || 0);
     });
 
-    return Object.values(grouped).map(item => ({
-      name: item.name,
-      avgPrice: Math.round(item.totalPrice / item.count),
-      count: item.count
-    })).sort((a, b) => b.avgPrice - a.avgPrice).slice(0, 6);
+    return Object.values(grouped)
+      .map(item => ({
+        name: item.name,
+        avgPrice: Math.round(item.totalPrice / item.count),
+        totalStock: item.totalStock,
+        productCount: item.count
+      }))
+      .sort((a, b) => b.productCount - a.productCount)
+      .slice(0, 8);
   }, [products]);
 
-  // Biểu đồ đánh giá theo loại sản phẩm
-  const ratingByTypeChartData = useMemo(() => {
+  // Biểu đồ đánh giá theo loại
+  const ratingChartData = useMemo(() => {
     if (!products?.data) return [];
     const grouped = {};
     products.data.forEach(product => {
@@ -161,35 +174,37 @@ const AdminProduct = () => {
       if (!grouped[type]) {
         grouped[type] = {
           name: type,
-          avgRating: 0,
-          count: 0,
-          totalRating: 0
+          totalRating: 0,
+          count: 0
         };
       }
       grouped[type].count += 1;
       grouped[type].totalRating += (product.rating || 0);
     });
 
-    return Object.values(grouped).map(item => ({
-      name: item.name,
-      avgRating: Number((item.totalRating / item.count).toFixed(1)),
-      count: item.count
-    })).sort((a, b) => b.avgRating - a.avgRating).slice(0, 6);
+    return Object.values(grouped)
+      .map(item => ({
+        name: item.name,
+        rating: Number((item.totalRating / item.count).toFixed(1)),
+        productCount: item.count
+      }))
+      .sort((a, b) => b.rating - a.rating)
+      .slice(0, 6);
   }, [products]);
 
-  // Biểu đồ tồn kho theo loại
-  const stockByTypeChartData = useMemo(() => {
+  // Top sản phẩm có rating cao nhất
+  const topRatedProducts = useMemo(() => {
     if (!products?.data) return [];
-    const grouped = {};
-    products.data.forEach(product => {
-      const type = product.type || 'Khác';
-      grouped[type] = (grouped[type] || 0) + (product.countInStock || 0);
-    });
-
-    return Object.keys(grouped).map(key => ({
-      name: key,
-      stock: grouped[key]
-    })).sort((a, b) => b.stock - a.stock).slice(0, 6);
+    return products.data
+      .filter(product => product.rating > 0)
+      .sort((a, b) => b.rating - a.rating)
+      .slice(0, 5)
+      .map(product => ({
+        name: product.name.length > 20 ? product.name.substring(0, 20) + '...' : product.name,
+        rating: product.rating,
+        price: product.price,
+        stock: product.countInStock
+      }));
   }, [products]);
 
   const handleEditProduct = async (id) => {
@@ -219,19 +234,29 @@ const AdminProduct = () => {
   };
 
   const renderAction = (record) => (
-    <div style={{ display: 'flex', gap: '12px' }}>
-      <EditOutlined
-        style={{ color: 'orange', fontSize: '18px', cursor: 'pointer' }}
+    <ActionButtons>
+      <Button
+        type="primary"
+        icon={<EditOutlined />}
+        size="small"
         onClick={() => handleEditProduct(record._id)}
-      />
-      <DeleteOutlined
-        style={{ color: 'red', fontSize: '18px', cursor: 'pointer' }}
+        style={{ backgroundColor: '#faad14', borderColor: '#faad14' }}
+      >
+        Sửa
+      </Button>
+      <Button
+        type="primary"
+        danger
+        icon={<DeleteOutlined />}
+        size="small"
         onClick={() => {
           setIsModalOpenDelete(true);
           setRowSelected(record._id);
         }}
-      />
-    </div>
+      >
+        Xóa
+      </Button>
+    </ActionButtons>
   );
 
   const dataTable = products?.data?.length > 0
@@ -276,13 +301,62 @@ const AdminProduct = () => {
   });
 
   const columns = [
-    { title: 'Tên sản phẩm', dataIndex: 'name', sorter: (a, b) => a.name.length - b.name.length, ...getColumnSearchProps('name') },
-    { title: 'Giá', dataIndex: 'price', sorter: (a, b) => parseFloat(a.price) - parseFloat(b.price) },
-    { title: 'Đánh giá', dataIndex: 'rating', sorter: (a, b) => a.rating - b.rating },
-    { title: 'Loại', dataIndex: 'type' },
-    { title: 'Tồn kho', dataIndex: 'countInStock', sorter: (a, b) => a.countInStock - b.countInStock },
-    { title: 'Giảm giá', dataIndex: 'discount', render: (discount) => `${discount || 0}%` },
-    { title: 'Hành động', render: (_, record) => renderAction(record) },
+    {
+      title: 'Tên sản phẩm',
+      dataIndex: 'name',
+      sorter: (a, b) => a.name.length - b.name.length,
+      ...getColumnSearchProps('name'),
+      width: 200
+    },
+    {
+      title: 'Giá',
+      dataIndex: 'price',
+      sorter: (a, b) => parseFloat(a.price) - parseFloat(b.price),
+      width: 120
+    },
+    {
+      title: 'Đánh giá',
+      dataIndex: 'rating',
+      sorter: (a, b) => a.rating - b.rating,
+      width: 100,
+      render: (rating) => (
+        <span style={{ color: rating >= 4 ? '#52c41a' : rating >= 3 ? '#faad14' : '#ff4d4f' }}>
+          {rating} ⭐
+        </span>
+      )
+    },
+    {
+      title: 'Loại',
+      dataIndex: 'type',
+      width: 120
+    },
+    {
+      title: 'Tồn kho',
+      dataIndex: 'countInStock',
+      sorter: (a, b) => a.countInStock - b.countInStock,
+      width: 100,
+      render: (stock) => (
+        <span style={{ color: stock > 10 ? '#52c41a' : stock > 0 ? '#faad14' : '#ff4d4f' }}>
+          {stock}
+        </span>
+      )
+    },
+    {
+      title: 'Giảm giá',
+      dataIndex: 'discount',
+      render: (discount) => (
+        <span style={{ color: discount > 0 ? '#ff4d4f' : '#666' }}>
+          {discount || 0}%
+        </span>
+      ),
+      width: 100
+    },
+    {
+      title: 'Hành động',
+      render: (_, record) => renderAction(record),
+      width: 150,
+      fixed: 'right'
+    },
   ];
 
   const { data, isLoading, isSuccess, isError } = mutation;
@@ -381,97 +455,128 @@ const AdminProduct = () => {
   const handleChangeSelect = (value) => setStateProduct({ ...stateProduct, type: value });
 
   return (
-    <div>
-      <WrapperHeader>Quản lý sản phẩm</WrapperHeader>
+    <DashboardContainer>
+      <WrapperHeader>📊 Quản lý Sản phẩm</WrapperHeader>
 
-      {/* Info Card */}
-      <InfoCardContainer>
-        <InfoCard>
-          <InfoLabel>Tổng sản phẩm</InfoLabel>
-          <InfoNumber>{totalProducts}</InfoNumber>
-        </InfoCard>
-        <InfoCard>
-          <InfoLabel>Tổng tồn kho</InfoLabel>
-          <InfoNumber>{totalStock}</InfoNumber>
-        </InfoCard>
-        <InfoCard>
-          <InfoLabel>Đánh giá trung bình</InfoLabel>
-          <InfoNumber>{averageRating} ⭐</InfoNumber>
-        </InfoCard>
-        <InfoCard>
-          <InfoLabel>Loại sản phẩm</InfoLabel>
-          <InfoNumber>{typeChartData.length}</InfoNumber>
-        </InfoCard>
-      </InfoCardContainer>
+      {/* Thống kê tổng quan */}
+      <StatsContainer>
+        <Row gutter={[16, 16]}>
+          <Col xs={24} sm={12} lg={6}>
+            <Card>
+              <Statistic
+                title="Tổng sản phẩm"
+                value={totalProducts}
+                prefix={<ShoppingOutlined />}
+                valueStyle={{ color: '#1890ff' }}
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} lg={6}>
+            <Card>
+              <Statistic
+                title="Tổng tồn kho"
+                value={totalStock}
+                prefix={<StockOutlined />}
+                valueStyle={{ color: '#52c41a' }}
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} lg={6}>
+            <Card>
+              <Statistic
+                title="Đánh giá TB"
+                value={averageRating}
+                prefix={<StarOutlined />}
+                valueStyle={{ color: '#faad14' }}
+                suffix="⭐"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} lg={6}>
+            <Card>
+              <Statistic
+                title="Loại sản phẩm"
+                value={totalTypes}
+                prefix={<AppstoreOutlined />}
+                valueStyle={{ color: '#722ed1' }}
+              />
+            </Card>
+          </Col>
+        </Row>
+      </StatsContainer>
 
-      {/* Charts */}
-      <ChartContainer>
-        <ChartCard>
-          <ChartTitle>Phân bố theo loại sản phẩm</ChartTitle>
-          <PieChart width={350} height={300}>
-            <Pie
-              dataKey="count"
-              data={typeChartData}
-              cx="50%"
-              cy="50%"
-              outerRadius={100}
-              fill="#8884d8"
-              label={({ name, count }) => `${name}: ${count}`}
-              isAnimationActive
-            >
-              {typeChartData.map((entry, index) => (
-                <Cell key={`cell-type-${index}`} fill={COLORS_TYPE[index % COLORS_TYPE.length]} />
-              ))}
-            </Pie>
-            <Tooltip />
-            <Legend verticalAlign="bottom" height={36} />
-          </PieChart>
-        </ChartCard>
+      {/* Biểu đồ */}
+      <ChartGrid>
+        <Row gutter={[16, 16]}>
+          {/* Biểu đồ phân bố loại sản phẩm */}
+          <Col xs={24} lg={12}>
+            <ChartCard>
+              <ChartTitle>📈 Phân bố loại sản phẩm</ChartTitle>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={typeChartData}
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                    label={({ name, value }) => `${name}: ${value}`}
+                  >
+                    {typeChartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => [`${value} sản phẩm`, 'Số lượng']} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          </Col>
 
-        <ChartCard>
-          <ChartTitle>Giá trung bình theo loại (Top 6)</ChartTitle>
-          <BarChart width={350} height={300} data={priceByTypeChartData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
-            <YAxis />
-            <Tooltip formatter={(value) => `${value.toLocaleString('vi-VN')} VND`} />
-            <Legend />
-            <Bar dataKey="avgPrice" fill="#8884d8" name="Giá trung bình" />
-          </BarChart>
-        </ChartCard>
+          {/* Biểu đồ giá và tồn kho */}
+          <Col xs={24} lg={12}>
+            <ChartCard>
+              <ChartTitle>💰 Giá & Tồn kho theo loại</ChartTitle>
+              <ResponsiveContainer width="100%" height={300}>
+                <ComposedChart data={priceStockChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" angle={-45} textAnchor="end" height={60} />
+                  <YAxis yAxisId="left" />
+                  <YAxis yAxisId="right" orientation="right" />
+                  <Tooltip
+                    formatter={(value, name) => {
+                      if (name === 'avgPrice') return [`${value.toLocaleString('vi-VN')} VND`, 'Giá TB'];
+                      if (name === 'totalStock') return [`${value} sản phẩm`, 'Tồn kho'];
+                      return [value, name];
+                    }}
+                  />
+                  <Legend />
+                  <Bar yAxisId="left" dataKey="avgPrice" fill="#8884d8" name="Giá TB" />
+                  <Line yAxisId="right" type="monotone" dataKey="totalStock" stroke="#ff7300" name="Tồn kho" />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          </Col>
 
-        <ChartCard>
-          <ChartTitle>Đánh giá trung bình theo loại (Top 6)</ChartTitle>
-          <AreaChart width={350} height={300} data={ratingByTypeChartData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
-            <YAxis domain={[0, 5]} />
-            <Tooltip />
-            <Legend />
-            <Area type="monotone" dataKey="avgRating" stroke="#ff7300" fill="#ff7300" fillOpacity={0.3} name="Đánh giá TB" />
-          </AreaChart>
-        </ChartCard>
 
-        <ChartCard>
-          <ChartTitle>Tồn kho theo loại (Top 6)</ChartTitle>
-          <BarChart width={350} height={300} data={stockByTypeChartData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
-            <YAxis />
-            <Tooltip />
-            <Legend />
-            <Bar dataKey="stock" fill="#82ca9d" name="Tồn kho" />
-          </BarChart>
-        </ChartCard>
-      </ChartContainer>
+        </Row>
+      </ChartGrid>
 
-      {/* Button thêm sản phẩm */}
-      <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'flex-end' }}>
+      {/* Header bảng sản phẩm */}
+      <div style={{ margin: '20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h3 style={{ margin: 0, color: '#1f2937' }}>Danh sách sản phẩm</h3>
         <Button
           type="primary"
           icon={<PlusOutlined />}
           onClick={() => setIsModalOpen(true)}
-          style={{ backgroundColor: '#1890ff', borderColor: '#1890ff' }}
+          size="large"
+          style={{
+            backgroundColor: '#1890ff',
+            borderColor: '#1890ff',
+            borderRadius: '6px',
+            fontWeight: '600'
+          }}
         >
           Thêm sản phẩm
         </Button>
@@ -485,14 +590,25 @@ const AdminProduct = () => {
             columns={columns}
             isLoading={isLoadingProducts}
             data={dataTable}
+            scroll={{ x: 1000 }}
           />
         ) : (
-          <Empty description="Chưa có sản phẩm nào" />
+          <Empty
+            description="Chưa có sản phẩm nào"
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            style={{ padding: '40px 0' }}
+          />
         )}
       </TableWrapper>
 
       {/* Modal tạo sản phẩm */}
-      <ModalComponent title="Tạo Sản Phẩm" open={isModalOpen} onCancel={handleCancel} footer={null}>
+      <ModalComponent
+        title="➕ Tạo Sản Phẩm Mới"
+        open={isModalOpen}
+        onCancel={handleCancel}
+        footer={null}
+        width={700}
+      >
         <Loading isLoading={isLoading}>
           <Form
             name="create-product"
@@ -525,7 +641,11 @@ const AdminProduct = () => {
               <InputComponent value={stateProduct.price} onChange={handleOnchange} name="price" />
             </Form.Item>
             <Form.Item label="Mô tả" name="description" rules={[{ required: true, message: 'Nhập mô tả!' }]}>
-              <InputComponent value={stateProduct.description} onChange={handleOnchange} name="description" />
+              <Input.TextArea
+                value={stateProduct.description}
+                onChange={(e) => handleOnchange({ target: { name: 'description', value: e.target.value } })}
+                rows={3}
+              />
             </Form.Item>
             <Form.Item label="Đánh giá" name="rating" rules={[{ required: true, message: 'Nhập rating!' }]}>
               <InputComponent value={stateProduct.rating} onChange={handleOnchange} name="rating" />
@@ -547,7 +667,7 @@ const AdminProduct = () => {
                     style={{
                       height: '60px',
                       width: '60px',
-                      borderRadius: '50%',
+                      borderRadius: '8px',
                       objectFit: 'cover',
                       marginLeft: '10px',
                     }}
@@ -556,22 +676,32 @@ const AdminProduct = () => {
                 )}
               </WrapperUploadFile>
             </Form.Item>
-            <Form.Item wrapperCol={{ offset: 20, span: 16 }}>
-              <Button type="primary" htmlType="submit">
-                Tạo
-              </Button>
+            <Form.Item wrapperCol={{ offset: 6, span: 18 }}>
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <Button onClick={handleCancel}>
+                  Hủy
+                </Button>
+                <Button type="primary" htmlType="submit" loading={isLoading}>
+                  Tạo sản phẩm
+                </Button>
+              </div>
             </Form.Item>
           </Form>
         </Loading>
       </ModalComponent>
 
       {/* Drawer cập nhật sản phẩm */}
-      <DrawerComponent title="Chi tiết sản phẩm" isOpen={isOpenDrawer} onClose={handleCloseDrawer} width="90%">
+      <DrawerComponent
+        title="✏️ Cập nhật Sản phẩm"
+        isOpen={isOpenDrawer}
+        onClose={handleCloseDrawer}
+        width="90%"
+      >
         <Loading isLoading={isLoadingUpdate || isLoadingUpdated}>
           <Form
             name="update-product"
-            labelCol={{ span: 2 }}
-            wrapperCol={{ span: 22 }}
+            labelCol={{ span: 4 }}
+            wrapperCol={{ span: 20 }}
             onFinish={onUpdateProduct}
             autoComplete="off"
             form={formUpdate}
@@ -589,7 +719,11 @@ const AdminProduct = () => {
               <InputComponent value={stateProductDetails.price} onChange={handleOnchangeDetails} name="price" />
             </Form.Item>
             <Form.Item label="Mô tả" name="description" rules={[{ required: true, message: 'Nhập mô tả!' }]}>
-              <InputComponent value={stateProductDetails.description} onChange={handleOnchangeDetails} name="description" />
+              <Input.TextArea
+                value={stateProductDetails.description}
+                onChange={(e) => handleOnchangeDetails({ target: { name: 'description', value: e.target.value } })}
+                rows={3}
+              />
             </Form.Item>
             <Form.Item label="Đánh giá" name="rating" rules={[{ required: true, message: 'Nhập rating!' }]}>
               <InputComponent value={stateProductDetails.rating} onChange={handleOnchangeDetails} name="rating" />
@@ -611,7 +745,7 @@ const AdminProduct = () => {
                     style={{
                       height: '60px',
                       width: '60px',
-                      borderRadius: '50%',
+                      borderRadius: '8px',
                       objectFit: 'cover',
                       marginLeft: '10px',
                     }}
@@ -620,10 +754,15 @@ const AdminProduct = () => {
                 )}
               </WrapperUploadFile>
             </Form.Item>
-            <Form.Item wrapperCol={{ offset: 20, span: 16 }}>
-              <Button type="primary" htmlType="submit">
-                Cập nhật
-              </Button>
+            <Form.Item wrapperCol={{ offset: 4, span: 20 }}>
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <Button onClick={handleCloseDrawer}>
+                  Hủy
+                </Button>
+                <Button type="primary" htmlType="submit" loading={isLoadingUpdated}>
+                  Cập nhật
+                </Button>
+              </div>
             </Form.Item>
           </Form>
         </Loading>
@@ -631,20 +770,22 @@ const AdminProduct = () => {
 
       {/* Modal xác nhận xóa */}
       <ModalComponent
-        title="Xóa Sản Phẩm"
+        title="🗑️ Xóa Sản Phẩm"
         open={isModalOpenDelete}
         onCancel={handleCancelDelete}
         onOk={handleDeleteProduct}
         okText="Xóa"
         cancelText="Hủy"
+        okButtonProps={{ danger: true, loading: isLoadingDeleted }}
       >
         <Loading isLoading={isLoadingDeleted}>
           <div style={{ textAlign: 'center', fontSize: '16px', padding: '20px 0' }}>
-            Bạn có chắc chắn muốn xóa sản phẩm này không?
+            <p>Bạn có chắc chắn muốn xóa sản phẩm này không?</p>
+            <p style={{ color: '#ff4d4f', fontWeight: '500' }}>Hành động này không thể hoàn tác!</p>
           </div>
         </Loading>
       </ModalComponent>
-    </div>
+    </DashboardContainer>
   );
 };
 
