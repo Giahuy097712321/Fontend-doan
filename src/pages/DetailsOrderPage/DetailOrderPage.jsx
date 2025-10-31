@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import * as OrderService from '../../services/OrderService'
 import Loading from '../../components/LoadingComponent/Loading'
 import {
-    PageContainer,
+
     OrderHeader,
     InfoSection,
     ProductSection,
@@ -16,6 +16,7 @@ import {
     PriceRow,
     StatusBadge
 } from './style'
+import { PageContainer } from './../../components/AdminUser/style';
 import { Tag, Divider } from 'antd'
 import {
     UserOutlined,
