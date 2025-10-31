@@ -4,15 +4,29 @@ import { useQuery } from '@tanstack/react-query'
 import * as OrderService from '../../services/OrderService'
 import Loading from '../../components/LoadingComponent/Loading'
 import {
-    WrapperHeaderUser,
-    WrapperInfoUser,
-    WrapperLabel,
-    WrapperContentInfo,
-    WrapperStyleContent,
-    WrapperProductItem,
-    WrapperPrice,
-    WrapperTotalPrice,
-} from './style' // nếu bạn có file style riêng
+    PageContainer,
+    OrderHeader,
+    InfoSection,
+    ProductSection,
+    PriceSection,
+    InfoCard,
+    ProductCard,
+    PriceCard,
+    ProductItem,
+    PriceRow,
+    StatusBadge
+} from './style'
+import { Tag, Divider } from 'antd'
+import {
+    UserOutlined,
+    EnvironmentOutlined,
+    PhoneOutlined,
+    TruckOutlined,
+    CreditCardOutlined,
+    CheckCircleOutlined,
+    CloseCircleOutlined,
+    ShoppingOutlined
+} from '@ant-design/icons'
 
 const DetailOrderPage = () => {
     const params = useParams()
@@ -40,134 +54,201 @@ const DetailOrderPage = () => {
             </div>
         )
     }
-    console.log('🔥 orderDetails:', orderDetails)
 
-    const { shippingAddress, orderItems, totalPrice, shippingPrice } = orderDetails
+    const { shippingAddress, orderItems, shippingPrice } = orderDetails
+
+    const getDeliveryText = (delivery) => {
+        switch (delivery) {
+            case 'FAST':
+                return 'Giao hàng tiết kiệm'
+            case 'GO_JEK':
+                return 'Giao hàng nhanh'
+            default:
+                return 'Giao hàng tiêu chuẩn'
+        }
+    }
+
+    const getPaymentStatus = (isPaid) => {
+        return isPaid ?
+            <Tag icon={<CheckCircleOutlined />} color="success">Đã thanh toán</Tag> :
+            <Tag icon={<CloseCircleOutlined />} color="error">Chưa thanh toán</Tag>
+    }
+
+    const calculateSubtotal = () => {
+        return orderItems?.reduce((sum, item) => {
+            const price = item?.product?.price || 0;
+            const discount = item?.discount || 0;
+            const priceAfterDiscount = price - (price * discount) / 100;
+            return sum + priceAfterDiscount * (item?.amount || 1);
+        }, 0) || 0
+    }
+
+    const calculateTotal = () => {
+        return calculateSubtotal() + (shippingPrice || 0)
+    }
 
     return (
-        <div style={{ width: '100%', background: '#f5f5fa', minHeight: '100vh', paddingBottom: '50px' }}>
-            <div style={{ width: '1270px', margin: '0 auto', paddingTop: '20px' }}>
-                <h4 style={{ marginBottom: '20px' }}>Chi tiết đơn hàng #{id}</h4>
+        <PageContainer>
+            <div className="container">
+                {/* Header */}
+                <OrderHeader>
+                    <div className="header-content">
+                        <ShoppingOutlined className="header-icon" />
+                        <div className="header-text">
+                            <h1>Chi tiết đơn hàng</h1>
+                            <div className="order-id">Mã đơn hàng: #{id?.slice(-8)?.toUpperCase()}</div>
+                        </div>
+                    </div>
+                    {getPaymentStatus(orderDetails?.isPaid)}
+                </OrderHeader>
 
-                {/* --- Thông tin giao hàng --- */}
-                <WrapperHeaderUser>
-                    <WrapperInfoUser>
-                        <WrapperLabel>Địa chỉ người nhận</WrapperLabel>
-                        <WrapperContentInfo>
-                            <div className='name-info'>{shippingAddress?.fullName}</div>
-                            <div className='address-info'>
-                                <span>Địa chỉ: </span>{`${shippingAddress?.address}, ${shippingAddress?.city}`}
+                {/* Information Section */}
+                <InfoSection>
+                    <InfoCard>
+                        <div className="card-header">
+                            <UserOutlined className="card-icon" />
+                            <h3>Thông tin người nhận</h3>
+                        </div>
+                        <div className="card-content">
+                            <div className="info-item">
+                                <strong>Họ tên:</strong>
+                                <span>{shippingAddress?.fullName}</span>
                             </div>
-                            <div className='phone-info'>
-                                <span>Điện thoại: </span>{shippingAddress?.phone}
+                            <div className="info-item">
+                                <strong>Điện thoại:</strong>
+                                <span>{shippingAddress?.phone}</span>
                             </div>
-                        </WrapperContentInfo>
-                    </WrapperInfoUser>
-
-                    <WrapperInfoUser>
-                        <WrapperLabel>Hình thức giao hàng</WrapperLabel>
-                        <WrapperContentInfo>
-                            <div className='delivery-info'>
-                                <span className='name-delivery'>
-                                    {orderDetails?.delivery || 'Chưa có thông tin'}
-                                </span>{' '}
-                                {orderDetails?.delivery === 'FAST'
-                                    ? 'Giao hàng tiết kiệm'
-                                    : orderDetails?.delivery === 'GO_JEK'
-                                        ? 'Giao hàng nhanh'
-                                        : ''}
+                            <div className="info-item">
+                                <strong>Địa chỉ:</strong>
+                                <span>{shippingAddress?.address}, {shippingAddress?.city}</span>
                             </div>
-                            <div className='delivery-fee'>
-                                <span>Phí giao hàng: </span>
-                                {shippingPrice ? `${shippingPrice.toLocaleString()} ₫` : 'Miễn phí'}
+                        </div>
+                    </InfoCard>
+
+                    <InfoCard>
+                        <div className="card-header">
+                            <TruckOutlined className="card-icon" />
+                            <h3>Thông tin giao hàng</h3>
+                        </div>
+                        <div className="card-content">
+                            <div className="info-item">
+                                <strong>Phương thức:</strong>
+                                <span>{getDeliveryText(orderDetails?.delivery)}</span>
                             </div>
-                        </WrapperContentInfo>
-                    </WrapperInfoUser>
-
-
-                    <WrapperInfoUser>
-                        <WrapperLabel>Hình thức thanh toán</WrapperLabel>
-                        <WrapperContentInfo>
-                            <div className='payment-info'>
-                                {orderDetails?.paymentMethod === 'Stripe' ? 'Thanh toán online (Stripe)' : 'Thanh toán khi nhận hàng'}
+                            <div className="info-item">
+                                <strong>Phí vận chuyển:</strong>
+                                <span className={shippingPrice ? 'price' : 'free'}>
+                                    {shippingPrice ? `${shippingPrice.toLocaleString()} ₫` : 'Miễn phí'}
+                                </span>
                             </div>
-                            <div className='status-payment' style={{ color: orderDetails?.isPaid ? 'green' : 'red', fontWeight: 600 }}>
-                                {orderDetails?.isPaid ? 'Đã thanh toán' : 'Chưa thanh toán'}
+                        </div>
+                    </InfoCard>
+
+                    <InfoCard>
+                        <div className="card-header">
+                            <CreditCardOutlined className="card-icon" />
+                            <h3>Thông tin thanh toán</h3>
+                        </div>
+                        <div className="card-content">
+                            <div className="info-item">
+                                <strong>Phương thức:</strong>
+                                <span>
+                                    {orderDetails?.paymentMethod === 'Stripe'
+                                        ? 'Thanh toán online (Stripe)'
+                                        : 'Thanh toán khi nhận hàng'
+                                    }
+                                </span>
                             </div>
-                        </WrapperContentInfo>
-                    </WrapperInfoUser>
+                            <div className="info-item">
+                                <strong>Trạng thái:</strong>
+                                {getPaymentStatus(orderDetails?.isPaid)}
+                            </div>
+                        </div>
+                    </InfoCard>
+                </InfoSection>
 
-                </WrapperHeaderUser>
+                {/* Products Section */}
+                <ProductSection>
+                    <ProductCard>
+                        <div className="card-header">
+                            <h3>Danh sách sản phẩm</h3>
+                            <span className="product-count">{orderItems?.length} sản phẩm</span>
+                        </div>
+                        <div className="products-list">
+                            {orderItems?.map((item, index) => {
+                                const price = item?.product?.price || 0;
+                                const discount = item?.discount || 0;
+                                const priceAfterDiscount = price - (price * discount) / 100;
+                                const amount = item?.amount || 1;
+                                const totalItemPrice = priceAfterDiscount * amount;
 
-                {/* --- Danh sách sản phẩm --- */}
-                {/* --- Danh sách sản phẩm --- */}
-                <WrapperStyleContent>
-                    {orderItems?.map((item, index) => {
-                        const price = item?.product?.price || 0;
-                        const discount = item?.discount || 0; // % giảm giá
-                        const priceAfterDiscount = price - (price * discount) / 100;
-                        const amount = item?.amount || 1;
-                        const totalItemPrice = priceAfterDiscount * amount;
-
-                        return (
-                            <WrapperProductItem key={index}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                    <img
-                                        src={item?.product?.image}
-                                        alt={item?.product?.name}
-                                        style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '8px' }}
-                                    />
-                                    <div>
-                                        <div style={{ fontWeight: '500' }}>{item?.product?.name}</div>
-                                        <div style={{ fontSize: '14px', color: '#666' }}>
-                                            Số lượng: <strong>{amount}</strong>
-                                            {discount > 0 && (
-                                                <span style={{ color: 'rgb(255, 66, 78)', marginLeft: '8px' }}>
-                                                    -{discount}%
-                                                </span>
-                                            )}
+                                return (
+                                    <ProductItem key={index}>
+                                        <div className="product-info">
+                                            <img
+                                                src={item?.product?.image}
+                                                alt={item?.product?.name}
+                                                className="product-image"
+                                            />
+                                            <div className="product-details">
+                                                <div className="product-name">{item?.product?.name}</div>
+                                                <div className="product-meta">
+                                                    <span className="quantity">Số lượng: {amount}</span>
+                                                    {discount > 0 && (
+                                                        <StatusBadge type="discount">
+                                                            -{discount}%
+                                                        </StatusBadge>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
-                                </div>
-                                <WrapperPrice>{price.toLocaleString()} ₫</WrapperPrice>
-                                <WrapperPrice>{totalItemPrice.toLocaleString()} ₫</WrapperPrice>
-                            </WrapperProductItem>
-                        );
-                    })}
-                </WrapperStyleContent>
+                                        <div className="price-info">
+                                            {discount > 0 && (
+                                                <div className="original-price">
+                                                    {price.toLocaleString()} ₫
+                                                </div>
+                                            )}
+                                            <div className="current-price">
+                                                {priceAfterDiscount.toLocaleString()} ₫
+                                            </div>
+                                            <div className="total-price">
+                                                {totalItemPrice.toLocaleString()} ₫
+                                            </div>
+                                        </div>
+                                    </ProductItem>
+                                );
+                            })}
+                        </div>
+                    </ProductCard>
+                </ProductSection>
 
-                {/* --- Tổng tiền --- */}
-                <WrapperTotalPrice>
-                    <div>
-                        Tạm tính: {
-                            orderItems?.reduce((sum, item) => {
-                                const price = item?.product?.price || 0;
-                                const discount = item?.discount || 0;
-                                const priceAfterDiscount = price - (price * discount) / 100;
-                                return sum + priceAfterDiscount * (item?.amount || 1);
-                            }, 0).toLocaleString()
-                        } ₫
-                    </div>
-
-                    <div>
-                        Phí vận chuyển: {shippingPrice ? `${shippingPrice.toLocaleString()} ₫` : 'Miễn phí'}
-                    </div>
-
-                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#ee4d2d' }}>
-                        Tổng cộng: {(
-                            orderItems?.reduce((sum, item) => {
-                                const price = item?.product?.price || 0;
-                                const discount = item?.discount || 0;
-                                const priceAfterDiscount = price - (price * discount) / 100;
-                                return sum + priceAfterDiscount * (item?.amount || 1);
-                            }, 0) + (shippingPrice || 0)
-                        ).toLocaleString()} ₫
-                    </div>
-                </WrapperTotalPrice>
-
-
+                {/* Price Summary Section */}
+                <PriceSection>
+                    <PriceCard>
+                        <h3>Tổng thanh toán</h3>
+                        <div className="price-details">
+                            <PriceRow>
+                                <span>Tạm tính:</span>
+                                <span>{calculateSubtotal().toLocaleString()} ₫</span>
+                            </PriceRow>
+                            <PriceRow>
+                                <span>Phí vận chuyển:</span>
+                                <span className={shippingPrice ? 'price' : 'free'}>
+                                    {shippingPrice ? `${shippingPrice.toLocaleString()} ₫` : 'Miễn phí'}
+                                </span>
+                            </PriceRow>
+                            <Divider />
+                            <PriceRow className="total">
+                                <span>Tổng cộng:</span>
+                                <span className="total-amount">
+                                    {calculateTotal().toLocaleString()} ₫
+                                </span>
+                            </PriceRow>
+                        </div>
+                    </PriceCard>
+                </PriceSection>
             </div>
-        </div>
+        </PageContainer>
     )
 }
 
