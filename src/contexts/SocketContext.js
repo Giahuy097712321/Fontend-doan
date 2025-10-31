@@ -106,7 +106,7 @@ export const SocketProvider = ({ children }) => {
         }
     }, [user?.id]); // Chỉ phụ thuộc vào user.id
 
-    // Effect để xử lý khi user thay đổi nhưng socket đã tồn tại
+    // Effect để xử lý khi user thay đổi nhưng socket đã tồn tại1git
     useEffect(() => {
         if (socket && user?.id && isConnected) {
             console.log('🔄 User changed, updating socket...');
