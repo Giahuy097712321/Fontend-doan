@@ -8,8 +8,8 @@ import { useMutationHooks } from './../../hooks/useMutationHook'
 import Loading from './../../components/LoadingComponent/Loading'
 import * as message from '../../components/Message/Message'
 import { updateUser } from '../../redux/sildes/userSlide'
-import { Button } from 'antd'
-import { UploadOutlined } from '@ant-design/icons'
+import { Button, Card, Row, Col } from 'antd'
+import { UploadOutlined, UserOutlined, MailOutlined, PhoneOutlined, EnvironmentOutlined, CameraOutlined } from '@ant-design/icons'
 import { getBase64 } from '../../utils'
 
 const ProfilePage = () => {
@@ -23,7 +23,7 @@ const ProfilePage = () => {
 
   const mutation = useMutationHooks((data) => {
     const { id, access_token, ...rests } = data
-    console.log("🔹 Gọi update với id:", id)  // debug id
+    console.log("🔹 Gọi update với id:", id)
     return UserService.updateUser(id, rests, access_token)
   })
 
@@ -46,38 +46,37 @@ const ProfilePage = () => {
     }
   }, [isSuccess, isError])
 
-const handleUpdate = () => {
-  if (!user?.id) {
-    message.error("Không tìm thấy ID user trong Redux!")
-    return
-  }
-
-  mutation.mutate({
-    id: user.id,  // ✅ dùng id
-    email,
-    name,
-    phone,
-    address,
-    avatar,
-    access_token: user?.access_token,
-  })
-}
-
-
-const handleGetDetailsUser = async (id, token) => {
-  try {
-    const res = await UserService.getDetailsUser(id, token)
-    if (res?.data) {
-      dispatch(updateUser({
-        ...res.data,
-        id: res.data._id,  // ✅ ép về id
-        access_token: token
-      }))
+  const handleUpdate = () => {
+    if (!user?.id) {
+      message.error("Không tìm thấy ID user trong Redux!")
+      return
     }
-  } catch (error) {
-    console.log("❌ Lỗi lấy chi tiết user:", error)
+
+    mutation.mutate({
+      id: user.id,
+      email,
+      name,
+      phone,
+      address,
+      avatar,
+      access_token: user?.access_token,
+    })
   }
-}
+
+  const handleGetDetailsUser = async (id, token) => {
+    try {
+      const res = await UserService.getDetailsUser(id, token)
+      if (res?.data) {
+        dispatch(updateUser({
+          ...res.data,
+          id: res.data._id,
+          access_token: token
+        }))
+      }
+    } catch (error) {
+      console.log("❌ Lỗi lấy chi tiết user:", error)
+    }
+  }
 
   const handleOnchangeAvatar = async ({ fileList }) => {
     if (fileList && fileList.length > 0) {
@@ -85,62 +84,280 @@ const handleGetDetailsUser = async (id, token) => {
       if (!file.url && !file.preview) {
         file.preview = await getBase64(file.originFileObj)
       }
-      setAvatar(file.preview) // preview avatar
+      setAvatar(file.preview)
     }
   }
 
   return (
-    <div style={{ width: '1270px', margin: '0 auto', height: '500px' }}>
-      <WrapperHeader>Thông tin người dùng</WrapperHeader>
-      <Loading isLoading={isLoading}>
-        <WrapperContentProfile>
-          {/* Name */}
-          <WrapperInput>
-            <WrapperLabel htmlFor="name">Name</WrapperLabel>
-            <InputForm style={{ width: '300px' }} id="name" value={name} onChange={setName} />
+    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px', minHeight: '80vh' }}>
+      <Card
+        title={
+          <WrapperHeader>
+            <UserOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
+            Thông tin cá nhân
+          </WrapperHeader>
+        }
+        style={{
+          borderRadius: '12px',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+          border: 'none'
+        }}
+        headStyle={{
+          borderBottom: '1px solid #f0f0f0',
+          fontSize: '20px',
+          fontWeight: '600'
+        }}
+      >
+        <Loading isLoading={isLoading}>
+          <Row gutter={[32, 32]}>
+            {/* Avatar Section */}
+            <Col xs={24} md={8}>
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                padding: '20px',
+                border: '1px solid #f0f0f0',
+                borderRadius: '8px',
+                background: '#fafafa'
+              }}>
+                <div style={{ position: 'relative', marginBottom: '20px' }}>
+                  <img
+                    src={avatar || '/default-avatar.png'}
+                    style={{
+                      height: '120px',
+                      width: '120px',
+                      borderRadius: '50%',
+                      objectFit: 'cover',
+                      border: '3px solid #fff',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                    }}
+                    alt="avatar"
+                  />
+                  <WrapperUploadFile
+                    onChange={handleOnchangeAvatar}
+                    maxCount={1}
+                    showUploadList={false}
+                    beforeUpload={() => false}
+                  >
+                    <Button
+                      icon={<CameraOutlined />}
+                      style={{
+                        position: 'absolute',
+                        bottom: '0',
+                        right: '0',
+                        background: '#1890ff',
+                        color: '#fff',
+                        border: '2px solid #fff',
+                        borderRadius: '50%',
+                        width: '36px',
+                        height: '36px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    />
+                  </WrapperUploadFile>
+                </div>
+                <ButtonComponent
+                  onClick={handleUpdate}
+                  size={40}
+                  styleButton={{
+                    height: '40px',
+                    background: 'linear-gradient(135deg, #1890ff 0%, #096dd9 100%)',
+                    border: 'none',
+                    borderRadius: '6px',
+                    width: '100%'
+                  }}
+                  styleTextButton={{
+                    color: '#fff',
+                    fontWeight: '600',
+                    fontSize: '14px'
+                  }}
+                  textButton={'Cập nhật ảnh đại diện'}
+                />
+              </div>
+            </Col>
+
+            {/* Info Section */}
+            <Col xs={24} md={16}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                {/* Name */}
+                <WrapperInput>
+                  <WrapperLabel htmlFor="name">
+                    <UserOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
+                    Họ tên
+                  </WrapperLabel>
+                  <div style={{ flex: 1, display: 'flex', gap: '12px' }}>
+                    <InputForm
+                      style={{
+                        width: '100%',
+                        borderRadius: '6px'
+                      }}
+                      id="name"
+                      value={name}
+                      onChange={setName}
+                      size="large"
+                    />
+                    <ButtonComponent
+                      onClick={handleUpdate}
+                      size={40}
+                      styleButton={{
+                        height: '40px',
+                        minWidth: '100px',
+                        background: '#52c41a',
+                        border: 'none',
+                        borderRadius: '6px'
+                      }}
+                      styleTextButton={{
+                        color: '#fff',
+                        fontWeight: '600'
+                      }}
+                      textButton={'Cập nhật'}
+                    />
+                  </div>
+                </WrapperInput>
+
+                {/* Email */}
+                <WrapperInput>
+                  <WrapperLabel htmlFor="email">
+                    <MailOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
+                    Email
+                  </WrapperLabel>
+                  <div style={{ flex: 1, display: 'flex', gap: '12px' }}>
+                    <InputForm
+                      style={{
+                        width: '100%',
+                        borderRadius: '6px'
+                      }}
+                      id="email"
+                      value={email}
+                      onChange={setEmail}
+                      size="large"
+                    />
+                    <ButtonComponent
+                      onClick={handleUpdate}
+                      size={40}
+                      styleButton={{
+                        height: '40px',
+                        minWidth: '100px',
+                        background: '#52c41a',
+                        border: 'none',
+                        borderRadius: '6px'
+                      }}
+                      styleTextButton={{
+                        color: '#fff',
+                        fontWeight: '600'
+                      }}
+                      textButton={'Cập nhật'}
+                    />
+                  </div>
+                </WrapperInput>
+
+                {/* Phone */}
+                <WrapperInput>
+                  <WrapperLabel htmlFor="phone">
+                    <PhoneOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
+                    Số điện thoại
+                  </WrapperLabel>
+                  <div style={{ flex: 1, display: 'flex', gap: '12px' }}>
+                    <InputForm
+                      style={{
+                        width: '100%',
+                        borderRadius: '6px'
+                      }}
+                      id="phone"
+                      value={phone}
+                      onChange={setPhone}
+                      size="large"
+                    />
+                    <ButtonComponent
+                      onClick={handleUpdate}
+                      size={40}
+                      styleButton={{
+                        height: '40px',
+                        minWidth: '100px',
+                        background: '#52c41a',
+                        border: 'none',
+                        borderRadius: '6px'
+                      }}
+                      styleTextButton={{
+                        color: '#fff',
+                        fontWeight: '600'
+                      }}
+                      textButton={'Cập nhật'}
+                    />
+                  </div>
+                </WrapperInput>
+
+                {/* Address */}
+                <WrapperInput>
+                  <WrapperLabel htmlFor="address">
+                    <EnvironmentOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
+                    Địa chỉ
+                  </WrapperLabel>
+                  <div style={{ flex: 1, display: 'flex', gap: '12px' }}>
+                    <InputForm
+                      style={{
+                        width: '100%',
+                        borderRadius: '6px'
+                      }}
+                      id="address"
+                      value={address}
+                      onChange={setAddress}
+                      size="large"
+                    />
+                    <ButtonComponent
+                      onClick={handleUpdate}
+                      size={40}
+                      styleButton={{
+                        height: '40px',
+                        minWidth: '100px',
+                        background: '#52c41a',
+                        border: 'none',
+                        borderRadius: '6px'
+                      }}
+                      styleTextButton={{
+                        color: '#fff',
+                        fontWeight: '600'
+                      }}
+                      textButton={'Cập nhật'}
+                    />
+                  </div>
+                </WrapperInput>
+              </div>
+            </Col>
+          </Row>
+
+          {/* Update All Button */}
+          <div style={{
+            marginTop: '32px',
+            paddingTop: '24px',
+            borderTop: '1px solid #f0f0f0',
+            display: 'flex',
+            justifyContent: 'center'
+          }}>
             <ButtonComponent
               onClick={handleUpdate}
               size={40}
-              styleButton={{ height: '30px' }}
-              textButton={'Cập nhật'}
-              
+              styleButton={{
+                height: '48px',
+                minWidth: '200px',
+                background: 'linear-gradient(135deg, #ff4d4f 0%, #cf1322 100%)',
+                border: 'none',
+                borderRadius: '8px',
+                boxShadow: '0 4px 12px rgba(255, 77, 79, 0.3)'
+              }}
+              styleTextButton={{
+                color: '#fff',
+                fontWeight: '600',
+                fontSize: '16px'
+              }}
+              textButton={'Cập nhật tất cả thông tin'}
             />
-          </WrapperInput>
-
-          {/* Email */}
-          <WrapperInput>
-            <WrapperLabel htmlFor="email">Email</WrapperLabel>
-            <InputForm style={{ width: '300px' }} id="email" value={email} onChange={setEmail} />
-            <ButtonComponent onClick={handleUpdate} size={40} styleButton={{ height: '30px' }} textButton={'Cập nhật'} />
-          </WrapperInput>
-
-          {/* Phone */}
-          <WrapperInput>
-            <WrapperLabel htmlFor="phone">Phone</WrapperLabel>
-            <InputForm style={{ width: '300px' }} id="phone" value={phone} onChange={setPhone} />
-            <ButtonComponent onClick={handleUpdate} size={40} styleButton={{ height: '30px' }} textButton={'Cập nhật'} />
-          </WrapperInput>
-
-          {/* Address */}
-          <WrapperInput>
-            <WrapperLabel htmlFor="address">Address</WrapperLabel>
-            <InputForm style={{ width: '300px' }} id="address" value={address} onChange={setAddress} />
-            <ButtonComponent onClick={handleUpdate} size={40} styleButton={{ height: '30px' }} textButton={'Cập nhật'} />
-          </WrapperInput>
-
-          {/* Avatar */}
-          <WrapperInput>
-            <WrapperLabel htmlFor="avatar">Avatar</WrapperLabel>
-            <WrapperUploadFile onChange={handleOnchangeAvatar} maxCount={1} showUploadList={false} beforeUpload={() => false}>
-              <Button icon={<UploadOutlined />}>Select File</Button>
-            </WrapperUploadFile>
-            {avatar && (
-              <img src={avatar} style={{ height: '60px', width: '60px', borderRadius: '50%', objectFit: 'cover' }} alt="avatar" />
-            )}
-            <ButtonComponent onClick={handleUpdate} size={40} styleButton={{ height: '30px' }} textButton={'Cập nhật'} />
-          </WrapperInput>
-        </WrapperContentProfile>
-      </Loading>
+          </div>
+        </Loading>
+      </Card>
     </div>
   )
 }
