@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import NavBarComponent from './../../components/NavbarComponent/NavbarComponent';
 import CardComponent from './../../components/CardComponent/CardComponent';
-import { Row, Col, Pagination, Slider, Select, Button } from 'antd';
+import { Row, Col, Slider, Select, Button } from 'antd';
 import {
   WrapperProducts,
   WrapperNavbar,
@@ -35,26 +35,19 @@ const TypeProductPage = () => {
   const [selectedRating, setSelectedRating] = useState(0)
   const [typeProducts, setTypeProducts] = useState([])
 
-  const [paginate, setPaginate] = useState({
-    page: 0,
-    limit: 12,
-    total: 1,
-  })
-
   const fetchAllTypeProduct = async () => {
     const res = await ProductService.getAllTypeProduct()
     if (res?.status === 'OK') setTypeProducts(res.data)
   }
 
   // Fetch products từ API
-  const fetchProductType = async (type, page, limit) => {
+  const fetchProductType = async (type) => {
     setLoading(true)
     try {
-      const res = await ProductService.getProductType(type, page, limit)
+      const res = await ProductService.getProductType(type)
       if (res?.status === 'OK') {
         setAllProducts(res?.data)
         setFilteredProducts(res?.data)
-        setPaginate({ ...paginate, total: res?.totalPage })
       }
     } catch (error) {
       console.error('Error fetching products:', error)
@@ -122,17 +115,13 @@ const TypeProductPage = () => {
   useEffect(() => {
     fetchAllTypeProduct()
     if (state) {
-      fetchProductType(state, paginate.page, paginate.limit)
+      fetchProductType(state)
     }
-  }, [state, paginate.page, paginate.limit])
+  }, [state])
 
   useEffect(() => {
     applyFiltersAndSort()
   }, [searchDebounce, priceRange, selectedRating, sortOption, allProducts])
-
-  const onChange = (current, pageSize) => {
-    setPaginate({ ...paginate, page: current - 1, limit: pageSize })
-  }
 
   const handleSortChange = (value) => {
     setSortOption(value)
@@ -150,14 +139,14 @@ const TypeProductPage = () => {
     <Loading isLoading={loading}>
       <div style={{
         width: '100%',
-        background: 'linear-gradient(135deg, #f5f7fa 0%, #e4e8ed 100%)',
+        background: '#f8f9fa',
         minHeight: '100vh',
-        padding: '20px 0'
+        padding: '16px 0'
       }}>
         <div style={{
           maxWidth: '1270px',
           margin: '0 auto',
-          padding: '0 15px'
+          padding: '0 12px'
         }}>
 
           {/* 🧭 DANH MỤC SẢN PHẨM */}
@@ -174,10 +163,10 @@ const TypeProductPage = () => {
           <WrapperHeader>
             <div>
               <h1 style={{
-                fontSize: '28px',
-                fontWeight: '700',
-                color: '#333',
-                marginBottom: '8px'
+                fontSize: '22px',
+                fontWeight: '600',
+                color: '#2c3e50',
+                marginBottom: '6px'
               }}>
                 {state || 'Tất cả sản phẩm'}
               </h1>
@@ -186,12 +175,12 @@ const TypeProductPage = () => {
               </WrapperCountText>
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-              <span style={{ fontWeight: '500', color: '#666' }}>Sắp xếp:</span>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <span style={{ fontWeight: '400', color: '#7f8c8d', fontSize: '14px' }}>Sắp xếp:</span>
               <Select
                 value={sortOption}
                 onChange={handleSortChange}
-                style={{ width: 200 }}
+                style={{ width: 180 }}
                 suffixIcon={<DownOutlined />}
               >
                 <Option value="default">Mặc định</Option>
@@ -291,7 +280,6 @@ const TypeProductPage = () => {
             </Col>
 
             {/* Product Grid */}
-            {/* Product Grid */}
             <Col xs={24} md={18}>
               <div style={{
                 display: 'flex',
@@ -317,7 +305,6 @@ const TypeProductPage = () => {
                   ))}
                 </WrapperProducts>
 
-
                 {filteredProducts?.length === 0 && !loading && (
                   <div style={{
                     textAlign: 'center',
@@ -329,28 +316,6 @@ const TypeProductPage = () => {
                   }}>
                     <h3 style={{ color: '#333', marginBottom: '8px' }}>Không tìm thấy sản phẩm phù hợp</h3>
                     <p>Hãy thử điều chỉnh bộ lọc hoặc tìm kiếm với từ khóa khác</p>
-                  </div>
-                )}
-
-                {/* Pagination */}
-                {filteredProducts?.length > 0 && (
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'center',
-                    marginTop: '32px',
-                    padding: '20px 0'
-                  }}>
-                    <Pagination
-                      current={paginate.page + 1}
-                      total={paginate.total * 10}
-                      onChange={onChange}
-                      pageSize={paginate.limit}
-                      showSizeChanger
-                      showQuickJumper
-                      showTotal={(total, range) =>
-                        `${range[0]}-${range[1]} của ${total} sản phẩm`
-                      }
-                    />
                   </div>
                 )}
               </div>
