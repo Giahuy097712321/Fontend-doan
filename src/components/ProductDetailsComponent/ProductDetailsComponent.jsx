@@ -1,11 +1,12 @@
 // src/components/ProductDetailsComponent/ProductDetailsComponent.jsx
 import { Col, Row, Rate, Tabs } from 'antd';
 import React, { useState } from 'react';
-import { MinusOutlined, PlusOutlined, SafetyCertificateOutlined, TruckOutlined, SyncOutlined, FileTextOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { MessageOutlined ,MinusOutlined, PlusOutlined, SafetyCertificateOutlined, TruckOutlined, SyncOutlined, FileTextOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import * as ProductService from '../../services/ProductService';
 import Loading from './../LoadingComponent/Loading';
 import ButtonComponent from './../ButtonComponent/ButtonComponent';
 import { addOrderProduct } from '../../redux/sildes/orderSlide';
+
 import {
     WrapprerStyleImageSmall,
     WrapperStyleNameProduct,
@@ -27,11 +28,9 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { converPrice, initFacebookSDK } from './../../utils';
+import { converPrice } from './../../utils';
 import { message } from 'antd';
-import LikeButtonComponent from './../LikeButtonComponent/LikeButtonComponent';
-import CommentComponent from './../CommentComponent/CommentComponent';
-import { useEffect } from 'react';
+import CustomCommentComponent from '../CustomCommentComponent/CustomCommentComponent';
 
 const ProductDetailsComponent = ({ idProduct }) => {
 
@@ -66,10 +65,6 @@ const ProductDetailsComponent = ({ idProduct }) => {
             setNumProduct((prev) => (prev > 1 ? prev - 1 : 1));
         }
     };
-
-    useEffect(() => {
-        initFacebookSDK();
-    }, [])
 
     const handleAddOrderProduct = () => {
         if (!user?.id) {
@@ -144,21 +139,22 @@ const ProductDetailsComponent = ({ idProduct }) => {
                 </WrapperDescription>
             ),
         },
-        {
-            key: 'comments',
-            label: `Bình luận (${productDetails?.commentCount || 0})`,
-            children: (
-                <CommentComponent
-                    datainer={
-                        process.env.REACT_APP_IS_LOCAL === "true"
-                            ? "https://developers.facebook.com/docs/plugins/comments#configurator"
-                            : window.location.href
-                    }
-                    width="100%"
-                    numPosts={5}
-                />
-            ),
-        },
+     // Trong ProductDetailsComponent.jsx, sửa tab comment:
+{
+    key: 'comments',
+    label: (
+        <span>
+            <MessageOutlined />
+            Đánh giá ({productDetails?.ratingSummary?.totalRatings || 0})
+        </span>
+    ),
+    children: (
+        <CustomCommentComponent
+            productId={idProduct}
+            productName={productDetails?.name}
+        />
+    ),
+}
     ];
 
     return (
@@ -220,10 +216,6 @@ const ProductDetailsComponent = ({ idProduct }) => {
                                 <span>Đổi trả trong 30 ngày</span>
                             </WrapperPolicyItem>
                         </WrapperInfoSection>
-
-                        <LikeButtonComponent
-                            datailref={process.env.REACT_APP_IS_LOCAL ? "https://developers.facebook.com/docs/plugins/" : window.location.href}
-                        />
 
                         {/* Phần số lượng */}
                         <div style={{
