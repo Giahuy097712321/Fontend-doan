@@ -1,5 +1,5 @@
 // HeaderComponent/style.js
-import { Row } from 'antd';
+import { Row, Drawer } from 'antd';
 import styled, { keyframes } from 'styled-components';
 
 const pulse = keyframes`
@@ -111,6 +111,12 @@ export const HeaderBackground = styled.div`
       radial-gradient(circle at 40% 40%, rgba(23, 107, 239, 0.05) 0%, transparent 50%);
     animation: ${circuitGlow} 4s ease-in-out infinite;
   }
+
+  @media (max-width: 768px) {
+    &::before {
+      background-size: 20px 20px;
+    }
+  }
 `;
 
 export const HeaderContainer = styled.div`
@@ -127,6 +133,10 @@ export const HeaderContainer = styled.div`
   overflow: hidden;
   border-left: 1px solid rgba(255, 255, 255, 0.1);
   border-right: 1px solid rgba(255, 255, 255, 0.1);
+
+  @media (max-width: 768px) {
+    backdrop-filter: blur(10px);
+  }
 `;
 
 export const DecorationElement = styled.div`
@@ -159,6 +169,10 @@ export const DecorationElement = styled.div`
   padding: 8px;
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.2);
+
+  @media (max-width: 768px) {
+    display: none;
+  }
 `;
 
 export const WapperHeader = styled(Row)`
@@ -170,6 +184,16 @@ export const WapperHeader = styled(Row)`
   flex-wrap: nowrap;
   position: relative;
   z-index: 3;
+
+  @media (max-width: 1270px) {
+    width: 100%;
+    padding: 10px 16px;
+  }
+
+  @media (max-width: 768px) {
+    padding: 8px 16px;
+    gap: 10px;
+  }
 `;
 
 export const LogoContainer = styled.div`
@@ -192,6 +216,14 @@ export const LogoContainer = styled.div`
     .logo-icon {
       transform: scale(1.1) rotate(10deg);
       filter: drop-shadow(0 0 10px rgba(74, 144, 226, 0.8));
+    }
+  }
+
+  @media (max-width: 768px) {
+    padding: 6px 12px;
+    
+    &:hover {
+      transform: none;
     }
   }
 `;
@@ -246,6 +278,18 @@ export const WapperTextHeader = styled.span`
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     font-family: 'Courier New', monospace;
   }
+
+  @media (max-width: 768px) {
+    font-size: 20px;
+    
+    .logo-icon {
+      font-size: 24px;
+    }
+    
+    .logo-text {
+      font-size: 18px;
+    }
+  }
 `;
 
 export const NotificationDot = styled.div`
@@ -266,12 +310,24 @@ export const NotificationDot = styled.div`
   border: 1px solid white;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   font-weight: bold;
+
+  @media (max-width: 768px) {
+    width: 14px;
+    height: 14px;
+    font-size: 7px;
+    top: -2px;
+    right: -4px;
+  }
 `;
 
 export const SearchSection = styled.div`
   display: flex;
   justify-content: center;
   width: 100%;
+
+  @media (max-width: 768px) {
+    display: none;
+  }
 `;
 
 export const SearchInputContainer = styled.div`
@@ -336,6 +392,23 @@ export const SearchInputContainer = styled.div`
       }
     }
   }
+
+  @media (max-width: 768px) {
+    max-width: 100%;
+    
+    .ant-input-group {
+      .ant-input {
+        height: 44px;
+        font-size: 14px;
+        padding: 0 16px;
+      }
+      
+      .ant-input-search-button {
+        height: 44px;
+        padding: 0 20px;
+      }
+    }
+  }
 `;
 
 export const WapperHeaderAccount = styled.div`
@@ -343,6 +416,10 @@ export const WapperHeaderAccount = styled.div`
   align-items: center;
   color: #fff;
   gap: 10px;
+
+  @media (max-width: 768px) {
+    gap: 6px;
+  }
 `;
 
 export const UserSection = styled.div`
@@ -411,6 +488,15 @@ export const UserSection = styled.div`
       transform: rotate(180deg);
     }
   }
+
+  @media (max-width: 768px) {
+    padding: 8px 12px;
+    gap: 8px;
+    
+    &:hover {
+      transform: none;
+    }
+  }
 `;
 
 export const UserInfo = styled.div`
@@ -437,6 +523,16 @@ export const UserInfo = styled.div`
     margin-top: 2px;
     backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  @media (max-width: 768px) {
+    .user-name {
+      font-size: 12px;
+    }
+    
+    .user-role {
+      font-size: 9px;
+    }
   }
 `;
 
@@ -474,6 +570,15 @@ export const LoginPrompt = styled.div`
   &:hover .account-link {
     transform: translateX(3px);
   }
+
+  @media (max-width: 768px) {
+    padding: 8px 12px;
+    gap: 8px;
+    
+    &:hover {
+      transform: none;
+    }
+  }
 `;
 
 export const WapperTextHeaderSmall = styled.span`
@@ -483,6 +588,10 @@ export const WapperTextHeaderSmall = styled.span`
   font-weight: 500;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+
+  @media (max-width: 768px) {
+    font-size: 10px;
+  }
 `;
 
 export const CartSection = styled.div`
@@ -548,6 +657,19 @@ export const CartSection = styled.div`
       background: linear-gradient(45deg, #4A90E2, #2D9CDB);
     }
   }
+
+  @media (max-width: 768px) {
+    padding: 8px 12px;
+    gap: 4px;
+    
+    .cart-icon {
+      font-size: 24px;
+    }
+    
+    &:hover {
+      transform: none;
+    }
+  }
 `;
 
 export const WrapperContentPopup = styled.p`
@@ -576,6 +698,99 @@ export const WrapperContentPopup = styled.p`
   }
 `;
 
+// Mobile Components
+export const MobileMenuButton = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(15px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 18px;
+  transition: all 0.3s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(74, 144, 226, 0.4);
+  }
+`;
+
+export const SearchButtonMobile = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(15px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 18px;
+  transition: all 0.3s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(74, 144, 226, 0.4);
+  }
+`;
+
+export const MobileMenu = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+`;
+
+export const MobileMenuItem = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: 1px solid transparent;
+  font-size: 14px;
+  font-weight: 500;
+
+  &:hover {
+    background: #f5f5f5;
+    transform: translateX(5px);
+  }
+
+  &.logout {
+    color: #ff4d4f;
+    border-top: 1px solid #f0f0f0;
+    margin-top: 8px;
+    padding-top: 16px;
+  }
+
+  &.login {
+    background: linear-gradient(135deg, #4A90E2, #2D9CDB);
+    color: white;
+    justify-content: center;
+    font-weight: 600;
+
+    &:hover {
+      background: linear-gradient(135deg, #3A80D2, #1D8CCB);
+    }
+  }
+`;
+
+export const SearchDrawer = styled(Drawer)`
+  .ant-drawer-header {
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .ant-drawer-body {
+    padding: 20px;
+  }
+`;
+
 export default {
   HeaderContainer,
   WapperHeader,
@@ -592,5 +807,10 @@ export default {
   SearchInputContainer,
   DecorationElement,
   NotificationDot,
-  HeaderBackground
+  HeaderBackground,
+  MobileMenuButton,
+  MobileMenu,
+  MobileMenuItem,
+  SearchButtonMobile,
+  SearchDrawer
 };
