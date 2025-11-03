@@ -142,9 +142,10 @@ const OrderPage = () => {
   // 🧩 Tính phí giao hàng (delivery) bằng useMemo
   const deliveryPriceMemo = useMemo(() => {
     if (!order?.orderItems || listChecked.length === 0) return 0; // Không có sản phẩm nào được chọn
-    if (priceMemo >= 200000 && priceMemo < 500000) return 10000;
-    if (priceMemo >= 500000) return 0;
-    return 20000;
+    if (priceMemo < 1000000) return 50000;        // Dưới 1 triệu: 50k
+    if (priceMemo >= 1000000 && priceMemo < 5000000) return 20000; // 1-5 triệu: 20k
+    if (priceMemo >= 5000000) return 0;           // Trên 5 triệu: miễn phí
+    return 50000;
   }, [priceMemo, order?.orderItems, listChecked]);
 
   // 🧩 Tính tổng giá trị đơn hàng
@@ -209,19 +210,26 @@ const OrderPage = () => {
   }
   const itemsDelivery = [
     {
-      title: '20.000 VND',
-      description: 'Dưới 200.000 VND',
+      title: '50.000 VND',
+      description: 'Dưới 1.000.000 VND',
     },
     {
-      title: '10.000 VND',
-      description: 'Từ 200.000 - 500.000 VND',
-
+      title: '20.000 VND',
+      description: 'Từ 1.000.000 - 5.000.000 VND',
     },
     {
       title: 'Miễn phí',
-      description: 'Trên 500.000 VND',
+      description: 'Trên 5.000.000 VND',
     },
   ]
+  const getCurrentStep = () => {
+    if (listChecked.length === 0) return 0;
+
+    if (priceMemo < 1000000) return 1;        // Dưới 1 triệu
+    if (priceMemo >= 1000000 && priceMemo < 5000000) return 2; // 1-5 triệu
+    return 3; // Trên 5 triệu
+  }
+
   return (
     <div style={{ background: '#f5f5fa', width: '100%', minHeight: '100vh' }}>
       <div style={{ width: '1270px', margin: '0 auto', height: '100%' }}>
@@ -229,17 +237,8 @@ const OrderPage = () => {
         <WrapperStyleHeaderDilivery>
           <Step
             items={itemsDelivery}
-            current={
-              listChecked.length === 0
-                ? 0
-                : deliveryPriceMemo === 20000
-                  ? 1
-                  : deliveryPriceMemo === 10000
-                    ? 2
-                    : 3
-            }
+            current={getCurrentStep()}
           />
-
         </WrapperStyleHeaderDilivery>
         <div style={{ display: 'flex', justifyContent: 'center' }}>
 
