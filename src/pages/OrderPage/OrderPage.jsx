@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { Checkbox, Form } from 'antd'
+import { Checkbox, Form, Grid } from 'antd'
 import { DeleteOutlined, MinusOutlined, PlusOutlined } from '@ant-design/icons'
 import {
+  WrapperContainer,
   WrapperCountOrder,
   WrapperInfo,
   WrapperItemOrder,
@@ -9,9 +10,12 @@ import {
   WrapperRight,
   WrapperStyleHeader,
   WrapperListOrder,
-  WrapperTotal,
   WrapperInputNumber,
-  WrapperStyleHeaderDilivery
+  WrapperStyleHeaderDilivery,
+  ActionButton,
+  MobileProductCard,
+  MobileProductInfo,
+  OrderSummary
 } from './style'
 import ButtonComponent from '../../components/ButtonComponent/ButtonComponent'
 import { useSelector, useDispatch } from 'react-redux'
@@ -21,7 +25,6 @@ import {
   removeOrderProduct,
   removeAllOrderProduct,
   selectedOrder,
-
 } from '../../redux/sildes/orderSlide'
 import { updateUser } from '../../redux/sildes/userSlide'
 
@@ -35,12 +38,15 @@ import { message } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import Step from '../../components/Step/StepComponent';
 
+const { useBreakpoint } = Grid;
+
 const OrderPage = () => {
   const navigate = useNavigate();
   const order = useSelector((state) => state?.order)
   const user = useSelector((state) => state?.user)
   const dispatch = useDispatch()
   const [form] = Form.useForm()
+  const screens = useBreakpoint();
 
   const [listChecked, setListChecked] = useState([])
   const [isOpenModalUpdateInfo, setIsOpenModalUpdateInfo] = useState(false)
@@ -50,6 +56,20 @@ const OrderPage = () => {
     address: '',
     city: '',
   })
+
+  // 🧩 Tính toán giá
+  const [priceMemo, setPriceMemo] = useState(0);
+  const [priceDiscountMemo, setPriceDiscountMemo] = useState(0);
+  const [totalPriceMemo, setTotalPriceMemo] = useState(0);
+
+  // 🧩 Tính phí giao hàng
+  const deliveryPriceMemo = useMemo(() => {
+    if (!order?.orderItems || listChecked.length === 0) return 0;
+    if (priceMemo < 1000000) return 50000;
+    if (priceMemo >= 1000000 && priceMemo < 5000000) return 20000;
+    if (priceMemo >= 5000000) return 0;
+    return 50000;
+  }, [priceMemo, order?.orderItems, listChecked]);
 
   // 🧩 Mutation update user
   const mutationUpdate = useMutationHooks(async ({ id, token, ...userData }) => {
@@ -70,13 +90,12 @@ const OrderPage = () => {
         },
         {
           onSuccess: (response) => {
-            // ✅ Cập nhật redux ngay lập tức — không cần reload
             dispatch(updateUser(response?.data))
             setIsOpenModalUpdateInfo(false)
+            message.success('Cập nhật thông tin thành công!')
           },
         }
       )
-
     }
   }
 
@@ -112,7 +131,10 @@ const OrderPage = () => {
 
   const handleDeleteOrder = (idProduct) => dispatch(removeOrderProduct({ idProduct }))
   const handleRemoveAllOrder = () => {
-    if (listChecked.length > 0) dispatch(removeAllOrderProduct({ listChecked }))
+    if (listChecked.length > 0) {
+      dispatch(removeAllOrderProduct({ listChecked }))
+      message.success('Đã xóa sản phẩm đã chọn!')
+    }
   }
 
   // 🧩 Khi mở modal cập nhật
@@ -131,49 +153,25 @@ const OrderPage = () => {
     form.setFieldsValue(stateUserDetails)
   }, [form, stateUserDetails])
 
-  // Bỏ dispatch tự động khi listChecked thay đổi, chỉ dispatch khi nhấn Mua hàng
-
-  // 🧩 Tính toán giá
-  // 🧩 Tính toán giá
-  const [priceMemo, setPriceMemo] = useState(0);
-  const [priceDiscountMemo, setPriceDiscountMemo] = useState(0);
-  const [totalPriceMemo, setTotalPriceMemo] = useState(0);
-
-  // 🧩 Tính phí giao hàng (delivery) bằng useMemo
-  const deliveryPriceMemo = useMemo(() => {
-    if (!order?.orderItems || listChecked.length === 0) return 0; // Không có sản phẩm nào được chọn
-    if (priceMemo < 1000000) return 50000;        // Dưới 1 triệu: 50k
-    if (priceMemo >= 1000000 && priceMemo < 5000000) return 20000; // 1-5 triệu: 20k
-    if (priceMemo >= 5000000) return 0;           // Trên 5 triệu: miễn phí
-    return 50000;
-  }, [priceMemo, order?.orderItems, listChecked]);
-
-  // 🧩 Tính tổng giá trị đơn hàng
+  // 🧩 Tính toán giá trị đơn hàng
   useEffect(() => {
     const selectedItems = order?.orderItems?.filter(item =>
       listChecked.includes(item.product)
     );
 
-    // Tính tổng giá gốc
     const price = selectedItems.reduce((total, cur) => total + cur.price * cur.amount, 0);
-
-    // Tính tổng số tiền giảm giá theo phần trăm
     const discount = selectedItems.reduce(
       (total, cur) => total + ((cur.price * cur.amount * (cur.discount || 0)) / 100),
       0
     );
-
-    // Tổng tiền sau giảm + phí giao hàng
     const total = price - discount + deliveryPriceMemo;
 
     setPriceMemo(price);
     setPriceDiscountMemo(discount);
     setTotalPriceMemo(total);
-
   }, [listChecked, order?.orderItems, deliveryPriceMemo]);
 
-
-  // 🧩 Khi nhấn “Mua hàng”
+  // 🧩 Khi nhấn "Mua hàng"
   const handleAddCard = () => {
     if (!order?.orderItems?.length) {
       message.error('Giỏ hàng trống!');
@@ -182,32 +180,26 @@ const OrderPage = () => {
     } else if (!user?.phone || !user?.address || !user?.name || !user?.city) {
       setIsOpenModalUpdateInfo(true);
     } else {
-      // ✅ Lấy trực tiếp danh sách sản phẩm đã chọn
       const selectedItems = order?.orderItems?.filter(item =>
         listChecked.includes(item.product)
       );
-
-      // ✅ Cập nhật Redux (tùy chọn)
       dispatch(selectedOrder({ listChecked }));
-      console.log("✅ selectedItems gửi sang payment:", selectedItems);
-
-      // ✅ Điều hướng và truyền dữ liệu ngay lập tức
       navigate('/payment', {
         state: {
-          orders: selectedItems, // Truyền sản phẩm chọn qua state
+          orders: selectedItems,
         },
       });
     }
   };
 
-
   const handleOnchangeDetails = (e) => {
     setStateUserDetails({ ...stateUserDetails, [e.target.name]: e.target.value })
   }
-  console.log("🧠 Dữ liệu user từ Redux:", user);
+
   const handleChangeAddress = () => {
     setIsOpenModalUpdateInfo(true)
   }
+
   const itemsDelivery = [
     {
       title: '50.000 VND',
@@ -222,248 +214,323 @@ const OrderPage = () => {
       description: 'Trên 5.000.000 VND',
     },
   ]
+
   const getCurrentStep = () => {
     if (listChecked.length === 0) return 0;
-
-    if (priceMemo < 1000000) return 1;        // Dưới 1 triệu
-    if (priceMemo >= 1000000 && priceMemo < 5000000) return 2; // 1-5 triệu
-    return 3; // Trên 5 triệu
+    if (priceMemo < 1000000) return 1;
+    if (priceMemo >= 1000000 && priceMemo < 5000000) return 2;
+    return 3;
   }
 
-  return (
-    <div style={{ background: '#f5f5fa', width: '100%', minHeight: '100vh' }}>
-      <div style={{ width: '1270px', margin: '0 auto', height: '100%' }}>
-        <h3 style={{ fontSize: '22px', fontWeight: 'bold', marginBottom: '20px' }}>Giỏ hàng</h3>
-        <WrapperStyleHeaderDilivery>
-          <Step
-            items={itemsDelivery}
-            current={getCurrentStep()}
+  // 🧩 Component tóm tắt đơn hàng
+  const OrderSummaryComponent = () => (
+    <OrderSummary>
+      <div className="summary-header">Tóm tắt đơn hàng</div>
+      <div className="summary-item">
+        <span>Tạm tính</span>
+        <span>{converPrice(priceMemo)}</span>
+      </div>
+      <div className="summary-item">
+        <span>Giảm giá</span>
+        <span className="discount">-{converPrice(priceDiscountMemo)}</span>
+      </div>
+      <div className="summary-item">
+        <span>Phí giao hàng</span>
+        <span>{converPrice(deliveryPriceMemo)}</span>
+      </div>
+      <div className="divider"></div>
+      <div className="total">
+        <span>Tổng tiền</span>
+        <span className="total-price">{converPrice(totalPriceMemo)}</span>
+      </div>
+    </OrderSummary>
+  )
+
+  // 🧩 Component địa chỉ giao hàng
+  const DeliveryAddressComponent = () => (
+    <WrapperInfo
+      style={{ cursor: 'pointer' }}
+      onClick={handleChangeAddress}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+        <span style={{ fontSize: '16px', fontWeight: '600' }}>Địa chỉ giao hàng</span>
+        <span style={{ color: '#1890ff', fontSize: '14px' }}>Thay đổi</span>
+      </div>
+      <div style={{ fontSize: '14px', color: '#666', lineHeight: '1.5' }}>
+        <div><strong>{user?.name || 'Chưa có'}</strong> | {user?.phone || 'Chưa có'}</div>
+        <div>{user?.address && user?.city ? `${user.address}, ${user.city}` : 'Chưa có địa chỉ'}</div>
+      </div>
+    </WrapperInfo>
+  )
+
+  // 🧩 Render sản phẩm cho cả mobile và desktop
+  const renderProductList = () => (
+    <>
+      <WrapperStyleHeader>
+        <span style={{ display: 'inline-block', width: screens.md ? '390px' : '100%' }}>
+          <Checkbox
+            onChange={handleOnchangeCheckAll}
+            checked={listChecked?.length === order?.orderItems?.length}
           />
-        </WrapperStyleHeaderDilivery>
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <span style={{ marginLeft: '8px', fontWeight: '500' }}>
+            Tất cả ({order?.orderItems?.length} sản phẩm)
+          </span>
+        </span>
+        {screens.md && (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>Đơn giá</span>
+            <span>Số lượng</span>
+            <span>Thành tiền</span>
+            <span>Thao tác</span>
+            <DeleteOutlined
+              style={{ cursor: 'pointer', color: '#ff4d4f' }}
+              onClick={handleRemoveAllOrder}
+            />
+          </div>
+        )}
+      </WrapperStyleHeader>
 
-          {/* LEFT SIDE */}
-          <WrapperLeft>
-            <WrapperStyleHeader>
-              <span style={{ display: 'inline-block', width: '390px' }}>
+      <WrapperListOrder>
+        {order?.orderItems?.map((orderItem) => (
+          screens.md ? (
+            // 🖥️ Desktop View
+            <WrapperItemOrder key={orderItem?.product} checked={listChecked.includes(orderItem?.product)}>
+              <div style={{ width: '390px', display: 'flex', alignItems: 'center', gap: 12 }}>
                 <Checkbox
-                  onChange={handleOnchangeCheckAll}
-                  checked={listChecked?.length === order?.orderItems?.length}
+                  onChange={onChange}
+                  value={orderItem?.product}
+                  checked={listChecked.includes(orderItem?.product)}
                 />
-                <span style={{ marginLeft: '8px' }}>
-                  Tất cả ({order?.orderItems?.length} sản phẩm)
-                </span>
-              </span>
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span>Đơn giá</span>
-                <span>Số lượng</span>
-                <span>Thành tiền</span>
-                <span>Thao tác</span>
-                <DeleteOutlined style={{ cursor: 'pointer' }} onClick={handleRemoveAllOrder} />
+                <img
+                  src={orderItem?.image}
+                  style={{
+                    width: '80px',
+                    height: '80px',
+                    objectFit: 'cover',
+                    borderRadius: '8px'
+                  }}
+                  alt={orderItem?.name}
+                />
+                <div
+                  style={{
+                    width: 240,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    fontSize: '14px',
+                    fontWeight: '500'
+                  }}
+                >
+                  {orderItem?.name}
+                </div>
               </div>
-            </WrapperStyleHeader>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <span style={{
+                    textDecoration: orderItem?.discount ? 'line-through' : 'none',
+                    color: '#888',
+                    fontSize: '14px'
+                  }}>
+                    {converPrice(orderItem?.price)}
+                  </span>
+                  {orderItem?.discount > 0 && (
+                    <span style={{
+                      color: 'rgb(255, 66, 78)',
+                      fontWeight: 500,
+                      fontSize: '13px',
+                      background: 'rgba(255, 66, 78, 0.1)',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      marginTop: '4px'
+                    }}>
+                      -{orderItem?.discount}%
+                    </span>
+                  )}
+                </div>
 
-            <WrapperListOrder>
-              {order?.orderItems?.map((orderItem) => (
-                <WrapperItemOrder key={orderItem?.product}>
-                  <div style={{ width: '390px', display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <Checkbox
-                      onChange={onChange}
-                      value={orderItem?.product}
-                      checked={listChecked.includes(orderItem?.product)}
-                    />
-                    <img
-                      src={orderItem?.image}
-                      style={{ width: '77px', height: '79px', objectFit: 'cover' }}
-                      alt={orderItem?.name}
-                    />
-                    <div
-                      style={{
-                        width: 260,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {orderItem?.name}
-                    </div>
+                <WrapperCountOrder>
+                  <button onClick={() => handleChangeCount('decrease', orderItem?.product)}>
+                    <MinusOutlined style={{ fontSize: '12px' }} />
+                  </button>
+                  <WrapperInputNumber value={orderItem?.amount} readOnly />
+                  <button onClick={() => handleChangeCount('increase', orderItem?.product)}>
+                    <PlusOutlined style={{ fontSize: '12px' }} />
+                  </button>
+                </WrapperCountOrder>
+
+                <span style={{
+                  color: 'rgb(255, 66, 78)',
+                  fontWeight: 600,
+                  fontSize: '15px'
+                }}>
+                  {converPrice(
+                    orderItem?.price *
+                    (1 - (orderItem?.discount || 0) / 100) *
+                    orderItem?.amount
+                  )}
+                </span>
+
+                <DeleteOutlined
+                  style={{ cursor: 'pointer', color: '#ff4d4f' }}
+                  onClick={() => handleDeleteOrder(orderItem?.product)}
+                />
+              </div>
+            </WrapperItemOrder>
+          ) : (
+            // 📱 Mobile View
+            <MobileProductCard key={orderItem?.product} checked={listChecked.includes(orderItem?.product)}>
+              <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+                <Checkbox
+                  onChange={onChange}
+                  value={orderItem?.product}
+                  checked={listChecked.includes(orderItem?.product)}
+                />
+                <img
+                  src={orderItem?.image}
+                  style={{
+                    width: '80px',
+                    height: '80px',
+                    objectFit: 'cover',
+                    borderRadius: '8px'
+                  }}
+                  alt={orderItem?.name}
+                />
+                <MobileProductInfo>
+                  <div style={{
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    marginBottom: '4px',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden'
+                  }}>
+                    {orderItem?.name}
                   </div>
-                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    {/* Giá gốc và giảm giá */}
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ textDecoration: orderItem?.discount ? 'line-through' : 'none', color: '#888' }}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '4px' }}>
+                    <span style={{
+                      color: 'rgb(255, 66, 78)',
+                      fontWeight: '600',
+                      fontSize: '14px'
+                    }}>
+                      {converPrice(orderItem?.price * (1 - (orderItem?.discount || 0) / 100))}
+                    </span>
+                    {orderItem?.discount > 0 && (
+                      <span style={{
+                        textDecoration: 'line-through',
+                        color: '#999',
+                        fontSize: '12px'
+                      }}>
                         {converPrice(orderItem?.price)}
                       </span>
-                      {orderItem?.discount > 0 && (
-                        <span style={{ color: 'rgb(255, 66, 78)', fontWeight: 500 }}>
-                          {`-${orderItem?.discount}%`}
-                        </span>
-                      )}
-                    </div>
-
-                    <WrapperCountOrder>
-                      <button onClick={() => handleChangeCount('decrease', orderItem?.product)}>
-                        <MinusOutlined />
-                      </button>
-                      <WrapperInputNumber value={orderItem?.amount} size="small" />
-                      <button onClick={() => handleChangeCount('increase', orderItem?.product)}>
-                        <PlusOutlined />
-                      </button>
-                    </WrapperCountOrder>
-
-                    {/* Giá sau khi giảm */}
-                    <span style={{ color: 'rgb(255, 66, 78)', fontWeight: 500 }}>
-                      {(
-                        orderItem?.price *
-                        (1 - (orderItem?.discount || 0) / 100) *
-                        orderItem?.amount
-                      ).toLocaleString('vi-VN')}
-                      ₫
-                    </span>
-
-                    <DeleteOutlined
-                      style={{ cursor: 'pointer' }}
-                      onClick={() => handleDeleteOrder(orderItem?.product)}
-                    />
+                    )}
                   </div>
+                  {orderItem?.discount > 0 && (
+                    <span style={{
+                      color: 'rgb(255, 66, 78)',
+                      fontSize: '12px',
+                      background: 'rgba(255, 66, 78, 0.1)',
+                      padding: '2px 6px',
+                      borderRadius: '4px'
+                    }}>
+                      -{orderItem?.discount}%
+                    </span>
+                  )}
+                </MobileProductInfo>
+              </div>
 
-                </WrapperItemOrder>
-              ))}
-            </WrapperListOrder>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <WrapperCountOrder>
+                  <button onClick={() => handleChangeCount('decrease', orderItem?.product)}>
+                    <MinusOutlined style={{ fontSize: '12px' }} />
+                  </button>
+                  <WrapperInputNumber value={orderItem?.amount} readOnly />
+                  <button onClick={() => handleChangeCount('increase', orderItem?.product)}>
+                    <PlusOutlined style={{ fontSize: '12px' }} />
+                  </button>
+                </WrapperCountOrder>
+
+                <DeleteOutlined
+                  style={{ cursor: 'pointer', color: '#ff4d4f', fontSize: '18px' }}
+                  onClick={() => handleDeleteOrder(orderItem?.product)}
+                />
+              </div>
+            </MobileProductCard>
+          )
+        ))}
+      </WrapperListOrder>
+    </>
+  )
+
+  return (
+    <WrapperContainer>
+      <div style={{
+        maxWidth: '1270px',
+        margin: '0 auto',
+        padding: screens.xs ? '12px' : '20px'
+      }}>
+        <h3 style={{
+          fontSize: screens.xs ? '20px' : '24px',
+          fontWeight: 'bold',
+          marginBottom: '20px',
+          color: '#333'
+        }}>
+          Giỏ hàng
+        </h3>
+
+        {/* 🚚 Step Component - CHỈ HIỂN THỊ 1 LẦN DUY NHẤT */}
+        <WrapperStyleHeaderDilivery>
+          <Step items={itemsDelivery} current={getCurrentStep()} />
+        </WrapperStyleHeaderDilivery>
+
+        <div style={{
+          display: 'flex',
+          flexDirection: screens.md ? 'row' : 'column',
+          gap: '24px',
+          alignItems: 'flex-start'
+        }}>
+          {/* LEFT SIDE - Sản phẩm */}
+          <WrapperLeft>
+            {renderProductList()}
           </WrapperLeft>
 
-          {/* RIGHT SIDE */}
+          {/* RIGHT SIDE - Thông tin đơn hàng */}
           <WrapperRight>
-            <div style={{ width: '100%' }}>
-              {/* 🏠 Địa chỉ giao hàng */}
-              <WrapperInfo
-                style={{
-                  backgroundColor: '#fafafa',
-                  padding: '16px 20px',
-                  borderRadius: '8px',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                  marginBottom: '16px',
-                  lineHeight: '1.6',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '16px', fontWeight: '600', color: '#333' }}>Địa chỉ giao hàng</span>
-                  <span
-                    onClick={
-                      handleChangeAddress
-                    }
-                    style={{
-                      color: '#007bff',
-                      fontSize: '14px',
-                      cursor: 'pointer',
-                      textDecoration: 'underline',
-                    }}
-                  >
-                    Thay đổi
-                  </span>
-                </div>
-
-                <div style={{ marginTop: '8px', fontSize: '15px', color: '#555' }}>
-                  <div>
-                    <strong>Người nhận:</strong> {user?.name || 'Chưa có'}
-                  </div>
-                  <div>
-                    <strong>Số điện thoại:</strong> {user?.phone || 'Chưa có'}
-                  </div>
-                  <div>
-                    <strong>Địa chỉ:</strong>{' '}
-                    <span style={{ color: '#007bff' }}>
-                      {user?.address && user?.city
-                        ? `${user.address} - ${user.city}`
-                        : 'Chưa có thông tin'}
-                    </span>
-                  </div>
-                </div>
-              </WrapperInfo>
-
-              {/* 💰 Tóm tắt đơn hàng */}
-              <WrapperInfo
-                style={{
-                  fontSize: '16px',
-                  lineHeight: '1.8',
-                  backgroundColor: '#fafafa',
-                  padding: '16px 20px',
-                  borderRadius: '8px',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontWeight: '500' }}>Tạm tính</span>
-                  <span style={{ fontWeight: '600' }}>{converPrice(priceMemo)}</span>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px' }}>
-                  <span style={{ fontWeight: '500' }}>Giảm giá</span>
-                  <span style={{ color: 'red', fontWeight: '600' }}>{converPrice(priceDiscountMemo)}</span>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px' }}>
-                  <span style={{ fontWeight: '500' }}>Phí giao hàng</span>
-                  <span style={{ fontWeight: '600' }}>{converPrice(deliveryPriceMemo)}</span>
-                </div>
-              </WrapperInfo>
-            </div>
-
-            {/* 💸 Tổng tiền */}
-            <WrapperTotal>
-              <span>Tổng tiền</span>
-              <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                <span style={{ color: 'rgb(254, 56, 52)', fontSize: '24px', fontWeight: 'bold' }}>
-                  {converPrice(totalPriceMemo)}
-                </span>
-                <span style={{ color: '#000', fontSize: '11px' }}>(Đã bao gồm VAT)</span>
-              </span>
-            </WrapperTotal>
-
-            {/* 🛒 Nút mua hàng */}
-            <ButtonComponent
-              onClick={handleAddCard}
-              size={40}
-              styleButton={{
-                background: 'rgb(255, 57, 69)',
-                height: '48px',
-                width: '220px',
-                border: 'none',
-                borderRadius: '4px',
-              }}
-              textButton={'Mua hàng'}
-              styleTextButton={{ color: '#fff', fontSize: '15px', fontWeight: '700' }}
-            />
+            <DeliveryAddressComponent />
+            <OrderSummaryComponent />
+            <ActionButton onClick={handleAddCard}>
+              {screens.xs ? `Mua hàng (${converPrice(totalPriceMemo)})` : 'Mua hàng'}
+            </ActionButton>
           </WrapperRight>
-
         </div>
       </div>
 
-      {/* 🧩 MODAL CẬP NHẬT THÔNG TIN */}
+      {/* MODAL CẬP NHẬT THÔNG TIN */}
       <ModalComponent
         title="Cập nhật thông tin giao hàng"
         open={isOpenModalUpdateInfo}
         onCancel={handleCancelUpdate}
         onOk={handleUpdateInfoUser}
+        width={screens.xs ? '90%' : 600}
       >
         <Loading isLoading={isLoading}>
-          <Form form={form} labelCol={{ span: 4 }} wrapperCol={{ span: 20 }}>
-            <Form.Item label="Name" name="name" rules={[{ required: true, message: 'Nhập tên!' }]}>
+          <Form form={form} labelCol={{ span: screens.xs ? 4 : 6 }} wrapperCol={{ span: screens.xs ? 20 : 18 }}>
+            <Form.Item label="Họ tên" name="name" rules={[{ required: true, message: 'Vui lòng nhập họ tên!' }]}>
               <InputComponent value={stateUserDetails.name} onChange={handleOnchangeDetails} name="name" />
             </Form.Item>
-            <Form.Item label="Phone" name="phone" rules={[{ required: true, message: 'Nhập số điện thoại!' }]}>
+            <Form.Item label="Số điện thoại" name="phone" rules={[{ required: true, message: 'Vui lòng nhập số điện thoại!' }]}>
               <InputComponent value={stateUserDetails.phone} onChange={handleOnchangeDetails} name="phone" />
             </Form.Item>
-            <Form.Item label="Address" name="address" rules={[{ required: true, message: 'Nhập địa chỉ!' }]}>
+            <Form.Item label="Địa chỉ" name="address" rules={[{ required: true, message: 'Vui lòng nhập địa chỉ!' }]}>
               <InputComponent value={stateUserDetails.address} onChange={handleOnchangeDetails} name="address" />
             </Form.Item>
-            <Form.Item label="City" name="city" rules={[{ required: true, message: 'Nhập thành phố!' }]}>
+            <Form.Item label="Thành phố" name="city" rules={[{ required: true, message: 'Vui lòng nhập thành phố!' }]}>
               <InputComponent value={stateUserDetails.city} onChange={handleOnchangeDetails} name="city" />
             </Form.Item>
           </Form>
         </Loading>
       </ModalComponent>
-    </div>
+    </WrapperContainer>
   )
 }
 
