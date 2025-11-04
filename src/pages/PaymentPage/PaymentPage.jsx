@@ -1,7 +1,7 @@
 // src/pages/PaymentPage/PaymentPage.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Form, message } from 'antd';
+import { Form, message, Grid } from 'antd';
 import { useSelector, useDispatch } from 'react-redux';
 import { removeAllOrderProduct } from '../../redux/sildes/orderSlide';
 import { updateUser } from '../../redux/sildes/userSlide';
@@ -14,13 +14,28 @@ import Loading from '../../components/LoadingComponent/Loading';
 import ModalComponent from '../../components/ModalComponent/ModalComponent';
 import InputComponent from '../../components/InputComponent/InputComponent';
 import { converPrice } from '../../utils';
-import { WrapperInfo, WrapperLeft, WrapperRight, WrapperTotal } from './style';
+import {
+  PaymentContainer,
+  PaymentWrapper,
+  PaymentHeader,
+  PaymentContent,
+  PaymentLeft,
+  PaymentRight,
+  PaymentSection,
+  PaymentInfoCard,
+  OrderSummary,
+  ProductList,
+  ProductItem,
+  DeliveryOption,
+  PaymentOption
+} from './style';
 
 // Stripe
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
 import StripeCheckoutComponent from '../../components/StripeCheckoutComponent/StripeCheckoutComponent';
 
+const { useBreakpoint } = Grid;
 const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLIC_KEY);
 
 const PaymentPage = () => {
@@ -30,6 +45,7 @@ const PaymentPage = () => {
   const [form] = Form.useForm();
   const navigate = useNavigate();
   const location = useLocation();
+  const screens = useBreakpoint();
 
   const passedOrders = location?.state?.orders || [];
   const orderItems = passedOrders.length ? passedOrders : order.orderItemsSelected;
@@ -42,6 +58,9 @@ const PaymentPage = () => {
   const [isStripeReady, setIsStripeReady] = useState(false);
   const [createdOrderId, setCreatedOrderId] = useState(null);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [hasOrdered, setHasOrdered] = useState(false);
+  const [isValidOrder, setIsValidOrder] = useState(true); // 🔥 Thêm state kiểm tra tính hợp lệ
+
   const mutationUpdate = useMutationHooks(async ({ id, token, ...userData }) => UserService.updateUser(id, userData, token));
   const mutationAddOrder = useMutationHooks((data) => {
     const { token, ...rest } = data;
@@ -50,6 +69,39 @@ const PaymentPage = () => {
 
   const { isLoading } = mutationUpdate;
   const { isLoading: isLoadingAddOrder, isSuccess, isError, data: newOrder } = mutationAddOrder;
+
+  // 🔥 KIỂM TRA NGHIÊM NGẶT KHI COMPONENT MOUNT
+  useEffect(() => {
+    const checkOrderValidity = () => {
+      // Kiểm tra có sản phẩm không
+      if (!orderItems?.length) {
+        message.error('Không có sản phẩm nào để thanh toán!');
+        setIsValidOrder(false);
+        setTimeout(() => navigate('/order', { replace: true }), 1500);
+        return false;
+      }
+
+      // Kiểm tra thông tin user
+      if (!user?.access_token || !user?.name || !user?.address || !user?.phone || !user?.city || !user?.id) {
+        message.warning('Vui lòng cập nhật đầy đủ thông tin giao hàng!');
+        setIsValidOrder(false);
+        return false;
+      }
+
+      // Kiểm tra xem đã từng đặt hàng chưa (phòng trường hợp quay lại)
+      if (hasOrdered) {
+        message.warning('Đơn hàng đã được xử lý!');
+        setIsValidOrder(false);
+        setTimeout(() => navigate('/order', { replace: true }), 1500);
+        return false;
+      }
+
+      setIsValidOrder(true);
+      return true;
+    };
+
+    checkOrderValidity();
+  }, [orderItems, user, hasOrdered, navigate]);
 
   // Load user details khi mở modal
   useEffect(() => {
@@ -66,24 +118,25 @@ const PaymentPage = () => {
   useEffect(() => { form.setFieldsValue(stateUserDetails); }, [form, stateUserDetails]);
 
   // Tính toán giá
-  const priceMemo = useMemo(() => orderItems.reduce((total, cur) => total + cur.price * cur.amount, 0), [orderItems]);
-  const priceDiscountMemo = useMemo(() => orderItems.reduce((total, cur) => total + (cur.price * cur.amount * (cur.discount || 0)) / 100, 0), [orderItems]);
+  const priceMemo = useMemo(() => {
+    if (!isValidOrder || !orderItems?.length) return 0;
+    return orderItems.reduce((total, cur) => total + cur.price * cur.amount, 0);
+  }, [orderItems, isValidOrder]);
+
+  const priceDiscountMemo = useMemo(() => {
+    if (!isValidOrder || !orderItems?.length) return 0;
+    return orderItems.reduce((total, cur) => total + (cur.price * cur.amount * (cur.discount || 0)) / 100, 0);
+  }, [orderItems, isValidOrder]);
+
   const deliveryPriceMemo = useMemo(() => {
-    if (!orderItems.length) return 0;
+    if (!isValidOrder || !orderItems.length) return 0;
     if (priceMemo >= 200000 && priceMemo < 500000) return 10000;
     if (priceMemo >= 500000) return 0;
     return 20000;
-  }, [priceMemo, orderItems]);
+  }, [priceMemo, orderItems, isValidOrder]);
+
   const totalPriceMemo = useMemo(() => priceMemo - priceDiscountMemo + deliveryPriceMemo, [priceMemo, priceDiscountMemo, deliveryPriceMemo]);
   const totalDiscountPercent = useMemo(() => (priceMemo === 0 ? 0 : Math.round((priceDiscountMemo / priceMemo) * 100)), [priceDiscountMemo, priceMemo]);
-
-  // Nếu không có sản phẩm thì chuyển trang
-  useEffect(() => {
-    if (!orderItems?.length) {
-      message.error('Vui lòng chọn sản phẩm ở giỏ hàng!');
-      navigate('/order');
-    }
-  }, [orderItems, navigate]);
 
   // Update thông tin user
   const handleUpdateInfoUser = () => {
@@ -91,7 +144,13 @@ const PaymentPage = () => {
     if (name && address && city && phone) {
       mutationUpdate.mutate(
         { id: user?.id || user?.data?._id, token: user?.access_token, ...stateUserDetails },
-        { onSuccess: (response) => { dispatch(updateUser(response?.data)); setIsOpenModalUpdateInfo(false); } }
+        {
+          onSuccess: (response) => {
+            dispatch(updateUser(response?.data));
+            setIsOpenModalUpdateInfo(false);
+            setIsValidOrder(true); // 🔥 Cập nhật lại tính hợp lệ sau khi update thông tin
+          }
+        }
       );
     } else message.warning('Vui lòng điền đầy đủ thông tin!');
   };
@@ -99,9 +158,12 @@ const PaymentPage = () => {
   const handleCancelUpdate = () => { form.resetFields(); setIsOpenModalUpdateInfo(false); };
 
   // Tạo đơn hàng
-  // ... giữ nguyên imports và logic cũ
-  // Trong handleCreateOrder
   const handleCreateOrder = async (paymentMethodType = payment) => {
+    // 🔥 KIỂM TRA LẠI TRƯỚC KHI TẠO ORDER
+    if (!isValidOrder || hasOrdered || !orderItems?.length) {
+      throw new Error('Đơn hàng không hợp lệ hoặc đã được xử lý');
+    }
+
     const isPaid = paymentMethodType === 'Thanh toán tiền mặt khi nhận hàng' || paymentMethodType === 'StripePaid';
     const payload = {
       orderItems,
@@ -126,7 +188,6 @@ const PaymentPage = () => {
       mutationAddOrder.mutate({ ...payload, token: user?.access_token }, {
         onSuccess: async (res) => {
           setCreatedOrderId(res.data._id);
-          // Nếu StripePaid, cập nhật payOrder để Stripe server confirm
           if (paymentMethodType === 'StripePaid') {
             await OrderService.payOrder(res.data._id, user?.access_token);
           }
@@ -137,22 +198,31 @@ const PaymentPage = () => {
     });
   };
 
-
-
   const handleAddOrder = async () => {
-    if (!user?.access_token || !orderItems?.length || !user?.name || !user?.address || !user?.phone || !user?.city || !user?.id) {
-      return message.warning('Vui lòng kiểm tra thông tin giao hàng và sản phẩm!');
+    // 🔥 KIỂM TRA NGHIÊM NGẶT TRƯỚC KHI ĐẶT HÀNG
+    if (!isValidOrder) {
+      message.error('Đơn hàng không hợp lệ!');
+      return;
     }
 
-    setIsPlacingOrder(true); // Bật loading
+    if (hasOrdered) {
+      message.warning('Đơn hàng đã được xử lý!');
+      return;
+    }
+
+    if (!user?.access_token || !orderItems?.length || !user?.name || !user?.address || !user?.phone || !user?.city || !user?.id) {
+      message.warning('Vui lòng kiểm tra thông tin giao hàng và sản phẩm!');
+      return;
+    }
+
+    setIsPlacingOrder(true);
 
     if (payment === 'Thanh toán tiền mặt khi nhận hàng') {
       try {
-        await handleCreateOrder(); // Tạo order
+        await handleCreateOrder();
       } catch (err) {
         message.error('Đặt hàng thất bại!');
-      } finally {
-        setIsPlacingOrder(false); // Tắt loading
+        setIsPlacingOrder(false);
       }
     } else if (payment === 'Stripe') {
       try {
@@ -162,145 +232,314 @@ const PaymentPage = () => {
           setIsStripeReady(true);
         } else {
           message.error('Không thể tạo payment Stripe!');
+          setIsPlacingOrder(false);
         }
       } catch (err) {
         console.error(err);
         message.error('Lỗi tạo payment Stripe!');
-      } finally {
         setIsPlacingOrder(false);
       }
     }
   };
 
-
-
-
-  // Xử lý sau khi order thành công
+  // 🔥 Xử lý sau khi order thành công - CẢI TIẾN LOGIC
   useEffect(() => {
-    if (isSuccess && payment === 'Thanh toán tiền mặt khi nhận hàng') {
+    if (isSuccess && !hasOrdered && isValidOrder) {
+      setHasOrdered(true); // Đánh dấu đã đặt hàng
+      setIsValidOrder(false); // Đánh dấu không hợp lệ nữa
+
       message.success('Đặt hàng thành công!');
+
+      // Xóa sản phẩm khỏi giỏ hàng
       const arrayOrdered = orderItems.map(item => item.product);
       dispatch(removeAllOrderProduct({ listChecked: arrayOrdered }));
-      setTimeout(() => navigate('/orderSuccess', { state: { delivery, payment, orders: orderItems, totalPriceMemo } }), 500);
-    } else if (isError) message.error('Đặt hàng thất bại!');
-  }, [isSuccess, isError, payment, orderItems, dispatch, navigate, delivery, totalPriceMemo]);
+
+      // 🔥 CHUYỂN HƯỚNG NGAY LẬP TỨC VỚI REPLACE
+      navigate('/orderSuccess', {
+        state: {
+          delivery,
+          payment,
+          orders: orderItems,
+          totalPriceMemo,
+          orderId: createdOrderId
+        },
+        replace: true // QUAN TRỌNG: không thể quay lại
+      });
+    } else if (isError && !hasOrdered) {
+      message.error('Đặt hàng thất bại!');
+      setIsPlacingOrder(false);
+    }
+  }, [isSuccess, isError, payment, orderItems, dispatch, navigate, delivery, totalPriceMemo, hasOrdered, createdOrderId, isValidOrder]);
 
   const handleOnchangeDetails = (e) => { setStateUserDetails({ ...stateUserDetails, [e.target.name]: e.target.value }); };
 
+  // 🔥 NẾU ORDER KHÔNG HỢP LỆ, HIỂN THị THÔNG BÁO
+  if (!isValidOrder) {
+    return (
+      <PaymentContainer>
+        <PaymentWrapper>
+          <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+            <h2 style={{ color: '#ff4d4f', marginBottom: '20px' }}>⚠️ Đơn hàng không hợp lệ</h2>
+            <p style={{ color: '#666', marginBottom: '30px' }}>
+              {!orderItems?.length
+                ? 'Không có sản phẩm nào để thanh toán.'
+                : 'Thông tin đơn hàng không đầy đủ hoặc đã được xử lý.'
+              }
+            </p>
+            <ButtonComponent
+              onClick={() => navigate('/order', { replace: true })}
+              size={40}
+              styleButton={{
+                background: 'linear-gradient(135deg, #1890ff 0%, #096dd9 100%)',
+                height: '48px',
+                width: '200px',
+                border: 'none',
+                borderRadius: '8px'
+              }}
+              textButton={'Quay lại giỏ hàng'}
+              styleTextButton={{ color: '#fff', fontSize: '16px', fontWeight: '600' }}
+            />
+          </div>
+        </PaymentWrapper>
+      </PaymentContainer>
+    );
+  }
+
   return (
-    <div style={{ background: '#f5f6fa', width: '100%', minHeight: '100vh', padding: '30px 0' }}>
+    <PaymentContainer>
       <Loading isLoading={isLoadingAddOrder || isLoading}>
-        <div style={{ width: '1250px', margin: '0 auto', background: '#fff', borderRadius: '10px', padding: '30px 40px', boxShadow: '0 4px 15px rgba(0,0,0,0.08)' }}>
-          <h2 style={{ fontSize: '24px', fontWeight: '700', color: '#222', marginBottom: '30px' }}>🧾 Thanh toán đơn hàng</h2>
+        <PaymentWrapper>
+          <PaymentHeader>
+            <h2>🧾 Thanh toán đơn hàng</h2>
+            <p>Hoàn tất đơn hàng của bạn</p>
+          </PaymentHeader>
 
-          <div style={{ display: 'flex', gap: '25px', alignItems: 'flex-start' }}>
-            {/* LEFT */}
-            <WrapperLeft style={{ flex: 1 }}>
-              <WrapperInfo style={{ backgroundColor: '#fafafa', padding: '16px 20px', borderRadius: '8px', marginBottom: '20px' }}>
-                <h4 style={{ fontSize: '17px', fontWeight: 600, marginBottom: '15px' }}>🚚 Phương thức giao hàng</h4>
-                <label>
-                  <input type="radio" name="delivery" value="FAST" checked={delivery === 'FAST'} onChange={(e) => setDelivery(e.target.value)} /> FAST - Giao hàng nhanh
-                </label>
-                <br />
-                <label>
-                  <input type="radio" name="delivery" value="GO_JEK" checked={delivery === 'GO_JEK'} onChange={(e) => setDelivery(e.target.value)} /> GO_JEK - Giao hàng tiết kiệm
-                </label>
-              </WrapperInfo>
+          <PaymentContent>
+            {/* LEFT SIDE */}
+            <PaymentLeft>
+              {/* Thông tin giao hàng */}
+              <PaymentSection>
+                <h3>🚚 Thông tin giao hàng</h3>
+                <PaymentInfoCard onClick={() => setIsOpenModalUpdateInfo(true)}>
+                  <div className="info-header">
+                    <span className="title">Địa chỉ nhận hàng</span>
+                    <span className="change-btn">Thay đổi</span>
+                  </div>
+                  <div className="info-content">
+                    <div className="info-item">
+                      <strong>{user?.name || 'Chưa có thông tin'}</strong>
+                      <span>|</span>
+                      <span>{user?.phone || 'Chưa có số điện thoại'}</span>
+                    </div>
+                    <div className="info-item">
+                      {user?.address && user?.city ? `${user.address}, ${user.city}` : 'Chưa có địa chỉ'}
+                    </div>
+                  </div>
+                </PaymentInfoCard>
+              </PaymentSection>
 
-              <WrapperInfo style={{ backgroundColor: '#fafafa', padding: '16px 20px', borderRadius: '8px' }}>
-                <h4 style={{ fontSize: '17px', fontWeight: 600, marginBottom: '15px' }}>💳 Phương thức thanh toán</h4>
-                <label>
-                  <input type="radio" name="payment" value="Thanh toán tiền mặt khi nhận hàng" checked={payment === 'Thanh toán tiền mặt khi nhận hàng'} onChange={(e) => setPayment(e.target.value)} /> Thanh toán COD
-                </label>
-                <br />
-                <label>
-                  <input type="radio" name="payment" value="Stripe" checked={payment === 'Stripe'} onChange={(e) => setPayment(e.target.value)} /> Thanh toán online (Stripe)
-                </label>
+              {/* Phương thức giao hàng */}
+              <PaymentSection>
+                <h3>📦 Phương thức giao hàng</h3>
+                <div className="options-grid">
+                  <DeliveryOption
+                    selected={delivery === 'FAST'}
+                    onClick={() => setDelivery('FAST')}
+                  >
+                    <div className="option-content">
+                      <div className="option-title">FAST Express</div>
+                      <div className="option-desc">Giao hàng nhanh trong 2-4 giờ</div>
+                    </div>
+                  </DeliveryOption>
+
+                  <DeliveryOption
+                    selected={delivery === 'GO_JEK'}
+                    onClick={() => setDelivery('GO_JEK')}
+                  >
+                    <div className="option-content">
+                      <div className="option-title">GO_JEK</div>
+                      <div className="option-desc">Giao hàng tiết kiệm - 1-2 ngày</div>
+                    </div>
+                  </DeliveryOption>
+                </div>
+              </PaymentSection>
+
+              {/* Phương thức thanh toán */}
+              <PaymentSection>
+                <h3>💳 Phương thức thanh toán</h3>
+                <div className="options-grid">
+                  <PaymentOption
+                    selected={payment === 'Thanh toán tiền mặt khi nhận hàng'}
+                    onClick={() => setPayment('Thanh toán tiền mặt khi nhận hàng')}
+                  >
+                    <div className="option-content">
+                      <div className="option-title">Thanh toán khi nhận hàng (COD)</div>
+                      <div className="option-desc">Thanh toán bằng tiền mặt khi nhận hàng</div>
+                    </div>
+                  </PaymentOption>
+
+                  <PaymentOption
+                    selected={payment === 'Stripe'}
+                    onClick={() => setPayment('Stripe')}
+                  >
+                    <div className="option-content">
+                      <div className="option-title">Thẻ tín dụng/ghi nợ</div>
+                      <div className="option-desc">Thanh toán an toàn qua Stripe</div>
+                    </div>
+                  </PaymentOption>
+                </div>
 
                 {/* Stripe Form */}
                 {isStripeReady && clientSecret && (
-                  <Elements stripe={stripePromise} options={{ clientSecret }}>
-                    <StripeCheckoutComponent
-                      totalPrice={totalPriceMemo}
-                      user={user}
-                      clientSecret={clientSecret}
-                      onSuccess={async () => {
-                        // Tạo order + mark isPaid = true
-                        const resOrder = await handleCreateOrder('StripePaid'); // chỉnh isPaid = true trong handleCreateOrder
-                        message.success('Thanh toán thành công!');
-                        const arrayOrdered = orderItems.map(item => item.product);
-                        dispatch(removeAllOrderProduct({ listChecked: arrayOrdered }));
-                        navigate('/orderSuccess', { state: { delivery, payment, orders: orderItems, totalPriceMemo } });
-                      }}
-                    />
-                  </Elements>
+                  <div style={{ marginTop: '20px' }}>
+                    <Elements stripe={stripePromise} options={{ clientSecret }}>
+                      <StripeCheckoutComponent
+                        totalPrice={totalPriceMemo}
+                        user={user}
+                        clientSecret={clientSecret}
+                        onSuccess={async () => {
+                          // 🔥 KIỂM TRA LẠI TRƯỚC KHI XỬ LÝ STRIPE
+                          if (hasOrdered || !isValidOrder) {
+                            message.warning('Đơn hàng đã được xử lý!');
+                            return;
+                          }
+
+                          setHasOrdered(true);
+                          setIsValidOrder(false);
+                          const resOrder = await handleCreateOrder('StripePaid');
+                          message.success('Thanh toán thành công!');
+                          const arrayOrdered = orderItems.map(item => item.product);
+                          dispatch(removeAllOrderProduct({ listChecked: arrayOrdered }));
+                          navigate('/orderSuccess', {
+                            state: {
+                              delivery,
+                              payment,
+                              orders: orderItems,
+                              totalPriceMemo,
+                              orderId: resOrder._id
+                            },
+                            replace: true
+                          });
+                        }}
+                      />
+                    </Elements>
+                  </div>
                 )}
+              </PaymentSection>
 
+              {/* Danh sách sản phẩm */}
+              <PaymentSection>
+                <h3>🛍️ Sản phẩm đã chọn</h3>
+                <ProductList>
+                  {orderItems.map((item, index) => (
+                    <ProductItem key={index}>
+                      <img src={item.image} alt={item.name} />
+                      <div className="product-info">
+                        <div className="product-name">{item.name}</div>
+                        <div className="product-price">
+                          {converPrice(item.price * (1 - (item.discount || 0) / 100))}
+                          {item.discount > 0 && (
+                            <span className="original-price">
+                              {converPrice(item.price)}
+                            </span>
+                          )}
+                        </div>
+                        {item.discount > 0 && (
+                          <div className="product-discount">-{item.discount}%</div>
+                        )}
+                      </div>
+                      <div className="product-quantity">x{item.amount}</div>
+                    </ProductItem>
+                  ))}
+                </ProductList>
+              </PaymentSection>
+            </PaymentLeft>
 
+            {/* RIGHT SIDE */}
+            <PaymentRight>
+              <OrderSummary>
+                <h3>Tóm tắt đơn hàng</h3>
 
-              </WrapperInfo>
-            </WrapperLeft>
-
-            {/* RIGHT */}
-            <WrapperRight>
-              <WrapperInfo style={{ backgroundColor: '#fafafa', padding: '16px 20px', borderRadius: '8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontWeight: '600' }}>Địa chỉ giao hàng</span>
-                  <span onClick={() => setIsOpenModalUpdateInfo(true)} style={{ color: '#007bff', cursor: 'pointer', textDecoration: 'underline' }}>Thay đổi</span>
+                <div className="summary-item">
+                  <span>Tạm tính ({orderItems.length} sản phẩm)</span>
+                  <span>{converPrice(priceMemo)}</span>
                 </div>
-                <div style={{ marginTop: '10px' }}>
-                  <div><strong>Người nhận:</strong> {user?.name}</div>
-                  <div><strong>SĐT:</strong> {user?.phone}</div>
-                  <div><strong>Địa chỉ:</strong> {user?.address} - {user?.city}</div>
+
+                <div className="summary-item discount">
+                  <span>Giảm giá</span>
+                  <span>-{converPrice(priceDiscountMemo)}</span>
                 </div>
-              </WrapperInfo>
 
-              <WrapperInfo style={{ backgroundColor: '#fafafa', padding: '16px 20px', borderRadius: '8px', marginTop: '20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Tạm tính</span><span>{converPrice(priceMemo)}</span></div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px' }}><span>Giảm giá %</span><span style={{ color: 'red' }}>- {converPrice(priceDiscountMemo)}</span></div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px' }}><span>Phí giao hàng</span><span>{converPrice(deliveryPriceMemo)}</span></div>
-              </WrapperInfo>
+                <div className="summary-item">
+                  <span>Phí giao hàng</span>
+                  <span>{converPrice(deliveryPriceMemo)}</span>
+                </div>
 
-              <WrapperTotal>
-                <span>Tổng tiền</span>
-                <span style={{ color: 'rgb(254, 56, 52)', fontSize: '22px', fontWeight: '700' }}>{converPrice(totalPriceMemo)}</span>
-              </WrapperTotal>
+                <div className="divider"></div>
 
-              <Loading isLoading={isPlacingOrder || isLoadingAddOrder || isLoading}>
-                <ButtonComponent
-                  onClick={handleAddOrder}
-                  size={40}
-                  styleButton={{ background: 'rgb(255, 57, 69)', height: '48px', width: '100%', border: 'none', borderRadius: '6px', marginTop: '15px' }}
-                  textButton={'Đặt hàng ngay'}
-                  styleTextButton={{ color: '#fff', fontSize: '15px', fontWeight: '700' }}
-                />
-              </Loading>
+                <div className="total">
+                  <span>Tổng cộng</span>
+                  <span className="total-price">{converPrice(totalPriceMemo)}</span>
+                </div>
 
-            </WrapperRight>
-          </div>
-        </div>
+                <div className="tax-note">(Đã bao gồm VAT nếu có)</div>
+
+                <Loading isLoading={isPlacingOrder}>
+                  <ButtonComponent
+                    onClick={handleAddOrder}
+                    size={40}
+                    styleButton={{
+                      background: hasOrdered ? '#ccc' : 'linear-gradient(135deg, #1890ff 0%, #096dd9 100%)',
+                      height: '52px',
+                      width: '100%',
+                      border: 'none',
+                      borderRadius: '12px',
+                      marginTop: '20px',
+                      fontSize: '16px',
+                      fontWeight: '600',
+                      cursor: hasOrdered ? 'not-allowed' : 'pointer'
+                    }}
+                    textButton={hasOrdered ? 'ĐANG XỬ LÝ...' : 'ĐẶT HÀNG NGAY'}
+                    styleTextButton={{ color: '#fff', fontSize: '16px', fontWeight: '600' }}
+                    disabled={isPlacingOrder || hasOrdered || !isValidOrder}
+                  />
+                </Loading>
+
+                <div className="security-note">
+                  <span>🔒 Thanh toán an toàn & bảo mật</span>
+                </div>
+              </OrderSummary>
+            </PaymentRight>
+          </PaymentContent>
+        </PaymentWrapper>
       </Loading>
 
       {/* Modal cập nhật thông tin */}
-      <ModalComponent title="Cập nhật thông tin giao hàng" open={isOpenModalUpdateInfo} onCancel={handleCancelUpdate} onOk={handleUpdateInfoUser}>
+      <ModalComponent
+        title="Cập nhật thông tin giao hàng"
+        open={isOpenModalUpdateInfo}
+        onCancel={handleCancelUpdate}
+        onOk={handleUpdateInfoUser}
+        width={screens.xs ? '90%' : 600}
+      >
         <Loading isLoading={isLoading}>
-          <Form form={form} labelCol={{ span: 5 }} wrapperCol={{ span: 19 }}>
-            <Form.Item label="Tên" name="name" rules={[{ required: true, message: 'Nhập tên!' }]}>
+          <Form form={form} labelCol={{ span: screens.xs ? 4 : 6 }} wrapperCol={{ span: screens.xs ? 20 : 18 }}>
+            <Form.Item label="Họ tên" name="name" rules={[{ required: true, message: 'Vui lòng nhập họ tên!' }]}>
               <InputComponent value={stateUserDetails.name} onChange={handleOnchangeDetails} name="name" />
             </Form.Item>
-            <Form.Item label="SĐT" name="phone" rules={[{ required: true, message: 'Nhập số điện thoại!' }]}>
+            <Form.Item label="Số điện thoại" name="phone" rules={[{ required: true, message: 'Vui lòng nhập số điện thoại!' }]}>
               <InputComponent value={stateUserDetails.phone} onChange={handleOnchangeDetails} name="phone" />
             </Form.Item>
-            <Form.Item label="Địa chỉ" name="address" rules={[{ required: true, message: 'Nhập địa chỉ!' }]}>
+            <Form.Item label="Địa chỉ" name="address" rules={[{ required: true, message: 'Vui lòng nhập địa chỉ!' }]}>
               <InputComponent value={stateUserDetails.address} onChange={handleOnchangeDetails} name="address" />
             </Form.Item>
-            <Form.Item label="Thành phố" name="city" rules={[{ required: true, message: 'Nhập thành phố!' }]}>
+            <Form.Item label="Thành phố" name="city" rules={[{ required: true, message: 'Vui lòng nhập thành phố!' }]}>
               <InputComponent value={stateUserDetails.city} onChange={handleOnchangeDetails} name="city" />
             </Form.Item>
           </Form>
         </Loading>
       </ModalComponent>
-    </div>
+    </PaymentContainer>
   );
 };
 
