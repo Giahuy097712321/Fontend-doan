@@ -20,7 +20,7 @@ const FooterComponent = () => {
                 <div style={{ textAlign: 'center', maxWidth: '800px', margin: '0 auto' }}>
                     <FooterTitle>GIỚI THIỆU</FooterTitle>
                     <FooterText>
-                        Đây là website demo về cửa hàng điện máy được xây dựng với mục đích học tập và trình diễn.
+                        Đây là website khóa luận về cửa hàng điện máy được xây dựng với mục đích học tập và trình diễn.
                         Cảm ơn bạn đã ghé thăm!
                     </FooterText>
 
@@ -45,7 +45,7 @@ const FooterComponent = () => {
             <FooterBottom>
                 <FooterSection>
                     <FooterText>
-                        © 2024 Demo Website. Được tạo ra với sự đam mê lập trình.
+                        © 2025 Trần Gia Huy Demo Website. Được tạo ra với sự đam mê lập trình.
                     </FooterText>
                     <FooterText style={{ fontSize: '12px', marginTop: '5px' }}>
                         Liên hệ: trangiahuy04092018@gmail.com | Theo dõi trên mạng xã hội
