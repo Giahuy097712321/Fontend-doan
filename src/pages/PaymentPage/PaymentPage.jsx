@@ -1,5 +1,5 @@
 // src/pages/PaymentPage/PaymentPage.jsx
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Form, message, Grid } from 'antd';
 import { useSelector, useDispatch } from 'react-redux';
@@ -59,7 +59,8 @@ const PaymentPage = () => {
   const [createdOrderId, setCreatedOrderId] = useState(null);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [hasOrdered, setHasOrdered] = useState(false);
-  const [isValidOrder, setIsValidOrder] = useState(true); // 🔥 Thêm state kiểm tra tính hợp lệ
+  const [isValidOrder, setIsValidOrder] = useState(true);
+  const [stripeKey, setStripeKey] = useState(0);
 
   const mutationUpdate = useMutationHooks(async ({ id, token, ...userData }) => UserService.updateUser(id, userData, token));
   const mutationAddOrder = useMutationHooks((data) => {
@@ -70,10 +71,24 @@ const PaymentPage = () => {
   const { isLoading } = mutationUpdate;
   const { isLoading: isLoadingAddOrder, isSuccess, isError, data: newOrder } = mutationAddOrder;
 
-  // 🔥 KIỂM TRA NGHIÊM NGẶT KHI COMPONENT MOUNT
+  // 🔥 RESET HOÀN TOÀN STRIPE VÀ TRẠNG THÁI KHI CHUYỂN SANG COD
+  const resetStripeAndState = useCallback(() => {
+    setClientSecret(null);
+    setIsStripeReady(false);
+    setIsPlacingOrder(false); // 🔥 QUAN TRỌNG: Reset trạng thái loading
+    setStripeKey(prev => prev + 1);
+  }, []);
+
+  // Tự động reset khi chuyển phương thức thanh toán
+  useEffect(() => {
+    if (payment !== 'Stripe') {
+      resetStripeAndState();
+    }
+  }, [payment, resetStripeAndState]);
+
+  // Kiểm tra tính hợp lệ của đơn hàng
   useEffect(() => {
     const checkOrderValidity = () => {
-      // Kiểm tra có sản phẩm không
       if (!orderItems?.length) {
         message.error('Không có sản phẩm nào để thanh toán!');
         setIsValidOrder(false);
@@ -81,14 +96,12 @@ const PaymentPage = () => {
         return false;
       }
 
-      // Kiểm tra thông tin user
       if (!user?.access_token || !user?.name || !user?.address || !user?.phone || !user?.city || !user?.id) {
         message.warning('Vui lòng cập nhật đầy đủ thông tin giao hàng!');
         setIsValidOrder(false);
         return false;
       }
 
-      // Kiểm tra xem đã từng đặt hàng chưa (phòng trường hợp quay lại)
       if (hasOrdered) {
         message.warning('Đơn hàng đã được xử lý!');
         setIsValidOrder(false);
@@ -115,7 +128,11 @@ const PaymentPage = () => {
     }
   }, [isOpenModalUpdateInfo, user]);
 
-  useEffect(() => { form.setFieldsValue(stateUserDetails); }, [form, stateUserDetails]);
+  useEffect(() => {
+    if (isOpenModalUpdateInfo) {
+      form.setFieldsValue(stateUserDetails);
+    }
+  }, [form, stateUserDetails, isOpenModalUpdateInfo]);
 
   // Tính toán giá
   const priceMemo = useMemo(() => {
@@ -148,29 +165,68 @@ const PaymentPage = () => {
           onSuccess: (response) => {
             dispatch(updateUser(response?.data));
             setIsOpenModalUpdateInfo(false);
-            setIsValidOrder(true); // 🔥 Cập nhật lại tính hợp lệ sau khi update thông tin
+            setIsValidOrder(true);
+          },
+          onError: () => {
+            message.error('Cập nhật thông tin thất bại!');
           }
         }
       );
-    } else message.warning('Vui lòng điền đầy đủ thông tin!');
+    } else {
+      message.warning('Vui lòng điền đầy đủ thông tin!');
+    }
   };
 
-  const handleCancelUpdate = () => { form.resetFields(); setIsOpenModalUpdateInfo(false); };
+  const handleCancelUpdate = () => {
+    form.resetFields();
+    setIsOpenModalUpdateInfo(false);
+  };
+
+  // 🔥 HÀM XỬ LÝ ORDER THÀNH CÔNG
+  const handleOrderSuccess = useCallback((orderData, paymentMethod = payment) => {
+    setHasOrdered(true);
+    setIsValidOrder(false);
+    setIsPlacingOrder(false);
+
+    // Xóa sản phẩm khỏi giỏ hàng
+    const arrayOrdered = orderItems.map(item => item.product);
+    dispatch(removeAllOrderProduct({ listChecked: arrayOrdered }));
+
+    message.success(
+      paymentMethod === 'StripePaid'
+        ? 'Thanh toán thành công!'
+        : 'Đặt hàng thành công!'
+    );
+
+    // Reset Stripe nếu có
+    resetStripeAndState();
+
+    // Chuyển hướng đến trang thành công
+    navigate('/orderSuccess', {
+      state: {
+        delivery,
+        payment: paymentMethod,
+        orders: orderItems,
+        totalPriceMemo,
+        orderId: orderData._id || createdOrderId
+      },
+      replace: true
+    });
+  }, [orderItems, dispatch, navigate, delivery, totalPriceMemo, createdOrderId, payment, resetStripeAndState]);
 
   // Tạo đơn hàng
   const handleCreateOrder = async (paymentMethodType = payment) => {
-    // 🔥 KIỂM TRA LẠI TRƯỚC KHI TẠO ORDER
     if (!isValidOrder || hasOrdered || !orderItems?.length) {
       throw new Error('Đơn hàng không hợp lệ hoặc đã được xử lý');
     }
 
-    const isPaid = paymentMethodType === 'Thanh toán tiền mặt khi nhận hàng' || paymentMethodType === 'StripePaid';
+    const isPaid = paymentMethodType === 'StripePaid';
     const payload = {
       orderItems,
       fullName: user?.name,
       email: user?.email,
       phone: user?.phone,
-      paymentMethod: paymentMethodType.startsWith('Stripe') ? 'Stripe' : paymentMethodType,
+      paymentMethod: paymentMethodType === 'StripePaid' ? 'Stripe' : paymentMethodType,
       itemsPrice: priceMemo,
       shippingPrice: deliveryPriceMemo,
       totalPrice: totalPriceMemo,
@@ -187,19 +243,29 @@ const PaymentPage = () => {
     return new Promise((resolve, reject) => {
       mutationAddOrder.mutate({ ...payload, token: user?.access_token }, {
         onSuccess: async (res) => {
-          setCreatedOrderId(res.data._id);
+          const orderData = res.data;
+          setCreatedOrderId(orderData._id);
+
           if (paymentMethodType === 'StripePaid') {
-            await OrderService.payOrder(res.data._id, user?.access_token);
+            try {
+              await OrderService.payOrder(orderData._id, user?.access_token);
+            } catch (payError) {
+              console.error('Lỗi khi cập nhật trạng thái thanh toán:', payError);
+            }
           }
-          resolve(res.data);
+
+          resolve(orderData);
         },
-        onError: reject
+        onError: (error) => {
+          console.error('Lỗi tạo đơn hàng:', error);
+          setIsPlacingOrder(false); // 🔥 Reset loading khi lỗi
+          reject(error);
+        }
       });
     });
   };
 
   const handleAddOrder = async () => {
-    // 🔥 KIỂM TRA NGHIÊM NGẶT TRƯỚC KHI ĐẶT HÀNG
     if (!isValidOrder) {
       message.error('Đơn hàng không hợp lệ!');
       return;
@@ -217,14 +283,19 @@ const PaymentPage = () => {
 
     setIsPlacingOrder(true);
 
+    // 🔥 XỬ LÝ COD
     if (payment === 'Thanh toán tiền mặt khi nhận hàng') {
       try {
-        await handleCreateOrder();
+        const orderData = await handleCreateOrder();
+        handleOrderSuccess(orderData);
       } catch (err) {
+        console.error('Lỗi đặt hàng COD:', err);
         message.error('Đặt hàng thất bại!');
-        setIsPlacingOrder(false);
+        // setIsPlacingOrder(false); // 🔥 Đã được reset trong handleCreateOrder onError
       }
-    } else if (payment === 'Stripe') {
+    }
+    // 🔥 XỬ LÝ STRIPE
+    else if (payment === 'Stripe') {
       try {
         const res = await PaymentService.createPaymentIntent(totalPriceMemo, user?.access_token);
         if (res?.status === 'OK' && res?.clientSecret) {
@@ -235,45 +306,61 @@ const PaymentPage = () => {
           setIsPlacingOrder(false);
         }
       } catch (err) {
-        console.error(err);
-        message.error('Lỗi tạo payment Stripe!');
-        setIsPlacingOrder(false);
+        console.error('Lỗi tạo payment Stripe:', err);
+
+        // 🔥 FALLBACK: Nếu Stripe lỗi, tự động chuyển sang COD
+        message.warning('Stripe đang gặp sự cố. Tự động chuyển sang thanh toán COD!');
+        setPayment('Thanh toán tiền mặt khi nhận hàng');
+        resetStripeAndState();
+        // setIsPlacingOrder(false); // 🔥 Đã được reset trong resetStripeAndState
       }
     }
   };
 
-  // 🔥 Xử lý sau khi order thành công - CẢI TIẾN LOGIC
-  useEffect(() => {
-    if (isSuccess && !hasOrdered && isValidOrder) {
-      setHasOrdered(true); // Đánh dấu đã đặt hàng
-      setIsValidOrder(false); // Đánh dấu không hợp lệ nữa
+  // 🔥 Xử lý thành công từ Stripe
+  const handleStripeSuccess = async () => {
+    if (hasOrdered || !isValidOrder) {
+      message.warning('Đơn hàng đã được xử lý!');
+      return;
+    }
 
-      message.success('Đặt hàng thành công!');
-
-      // Xóa sản phẩm khỏi giỏ hàng
-      const arrayOrdered = orderItems.map(item => item.product);
-      dispatch(removeAllOrderProduct({ listChecked: arrayOrdered }));
-
-      // 🔥 CHUYỂN HƯỚNG NGAY LẬP TỨC VỚI REPLACE
-      navigate('/orderSuccess', {
-        state: {
-          delivery,
-          payment,
-          orders: orderItems,
-          totalPriceMemo,
-          orderId: createdOrderId
-        },
-        replace: true // QUAN TRỌNG: không thể quay lại
-      });
-    } else if (isError && !hasOrdered) {
-      message.error('Đặt hàng thất bại!');
+    try {
+      setIsPlacingOrder(true);
+      const orderData = await handleCreateOrder('StripePaid');
+      handleOrderSuccess(orderData, 'StripePaid');
+    } catch (error) {
+      console.error('Lỗi xử lý Stripe success:', error);
+      message.error('Có lỗi xảy ra khi xử lý đơn hàng!');
       setIsPlacingOrder(false);
     }
-  }, [isSuccess, isError, payment, orderItems, dispatch, navigate, delivery, totalPriceMemo, hasOrdered, createdOrderId, isValidOrder]);
+  };
 
-  const handleOnchangeDetails = (e) => { setStateUserDetails({ ...stateUserDetails, [e.target.name]: e.target.value }); };
+  // 🔥 Xử lý khi hủy Stripe
+  const handleStripeCancel = () => {
+    resetStripeAndState();
+    message.info('Đã hủy thanh toán Stripe');
+  };
 
-  // 🔥 NẾU ORDER KHÔNG HỢP LỆ, HIỂN THị THÔNG BÁO
+  // Xử lý khi mutation thành công (fallback)
+  useEffect(() => {
+    if (isSuccess && newOrder && !hasOrdered && isValidOrder) {
+      handleOrderSuccess(newOrder.data);
+    }
+  }, [isSuccess, newOrder, hasOrdered, isValidOrder, handleOrderSuccess]);
+
+  const handleOnchangeDetails = (e) => {
+    setStateUserDetails({ ...stateUserDetails, [e.target.name]: e.target.value });
+  };
+
+  // 🔥 XỬ LÝ KHI CHUYỂN ĐỔI PHƯƠNG THỨC THANH TOÁN
+  const handlePaymentChange = (newPaymentMethod) => {
+    // Reset trạng thái Stripe khi chuyển sang COD
+    if (newPaymentMethod !== 'Stripe') {
+      resetStripeAndState();
+    }
+    setPayment(newPaymentMethod);
+  };
+
   if (!isValidOrder) {
     return (
       <PaymentContainer>
@@ -370,7 +457,7 @@ const PaymentPage = () => {
                 <div className="options-grid">
                   <PaymentOption
                     selected={payment === 'Thanh toán tiền mặt khi nhận hàng'}
-                    onClick={() => setPayment('Thanh toán tiền mặt khi nhận hàng')}
+                    onClick={() => handlePaymentChange('Thanh toán tiền mặt khi nhận hàng')}
                   >
                     <div className="option-content">
                       <div className="option-title">Thanh toán khi nhận hàng (COD)</div>
@@ -380,7 +467,7 @@ const PaymentPage = () => {
 
                   <PaymentOption
                     selected={payment === 'Stripe'}
-                    onClick={() => setPayment('Stripe')}
+                    onClick={() => handlePaymentChange('Stripe')}
                   >
                     <div className="option-content">
                       <div className="option-title">Thẻ tín dụng/ghi nợ</div>
@@ -390,37 +477,19 @@ const PaymentPage = () => {
                 </div>
 
                 {/* Stripe Form */}
-                {isStripeReady && clientSecret && (
+                {payment === 'Stripe' && isStripeReady && clientSecret && (
                   <div style={{ marginTop: '20px' }}>
-                    <Elements stripe={stripePromise} options={{ clientSecret }}>
+                    <Elements
+                      key={stripeKey}
+                      stripe={stripePromise}
+                      options={{ clientSecret }}
+                    >
                       <StripeCheckoutComponent
                         totalPrice={totalPriceMemo}
                         user={user}
                         clientSecret={clientSecret}
-                        onSuccess={async () => {
-                          // 🔥 KIỂM TRA LẠI TRƯỚC KHI XỬ LÝ STRIPE
-                          if (hasOrdered || !isValidOrder) {
-                            message.warning('Đơn hàng đã được xử lý!');
-                            return;
-                          }
-
-                          setHasOrdered(true);
-                          setIsValidOrder(false);
-                          const resOrder = await handleCreateOrder('StripePaid');
-                          message.success('Thanh toán thành công!');
-                          const arrayOrdered = orderItems.map(item => item.product);
-                          dispatch(removeAllOrderProduct({ listChecked: arrayOrdered }));
-                          navigate('/orderSuccess', {
-                            state: {
-                              delivery,
-                              payment,
-                              orders: orderItems,
-                              totalPriceMemo,
-                              orderId: resOrder._id
-                            },
-                            replace: true
-                          });
-                        }}
+                        onSuccess={handleStripeSuccess}
+                        onCancel={handleStripeCancel}
                       />
                     </Elements>
                   </div>
@@ -489,7 +558,7 @@ const PaymentPage = () => {
                     onClick={handleAddOrder}
                     size={40}
                     styleButton={{
-                      background: hasOrdered ? '#ccc' : 'linear-gradient(135deg, #1890ff 0%, #096dd9 100%)',
+                      background: hasOrdered || (payment === 'Stripe' && isStripeReady) ? '#ccc' : 'linear-gradient(135deg, #1890ff 0%, #096dd9 100%)',
                       height: '52px',
                       width: '100%',
                       border: 'none',
@@ -497,11 +566,15 @@ const PaymentPage = () => {
                       marginTop: '20px',
                       fontSize: '16px',
                       fontWeight: '600',
-                      cursor: hasOrdered ? 'not-allowed' : 'pointer'
+                      cursor: hasOrdered || (payment === 'Stripe' && isStripeReady) ? 'not-allowed' : 'pointer'
                     }}
-                    textButton={hasOrdered ? 'ĐANG XỬ LÝ...' : 'ĐẶT HÀNG NGAY'}
+                    textButton={
+                      hasOrdered ? 'ĐANG XỬ LÝ...' :
+                        (payment === 'Stripe' && isStripeReady) ? 'ĐANG CHỜ THANH TOÁN...' :
+                          'ĐẶT HÀNG NGAY'
+                    }
                     styleTextButton={{ color: '#fff', fontSize: '16px', fontWeight: '600' }}
-                    disabled={isPlacingOrder || hasOrdered || !isValidOrder}
+                    disabled={isPlacingOrder || hasOrdered || (payment === 'Stripe' && isStripeReady)}
                   />
                 </Loading>
 
@@ -523,18 +596,55 @@ const PaymentPage = () => {
         width={screens.xs ? '90%' : 600}
       >
         <Loading isLoading={isLoading}>
-          <Form form={form} labelCol={{ span: screens.xs ? 4 : 6 }} wrapperCol={{ span: screens.xs ? 20 : 18 }}>
-            <Form.Item label="Họ tên" name="name" rules={[{ required: true, message: 'Vui lòng nhập họ tên!' }]}>
-              <InputComponent value={stateUserDetails.name} onChange={handleOnchangeDetails} name="name" />
+          <Form
+            form={form}
+            labelCol={{ span: screens.xs ? 4 : 6 }}
+            wrapperCol={{ span: screens.xs ? 20 : 18 }}
+            initialValues={stateUserDetails}
+          >
+            <Form.Item
+              label="Họ tên"
+              name="name"
+              rules={[{ required: true, message: 'Vui lòng nhập họ tên!' }]}
+            >
+              <InputComponent
+                value={stateUserDetails.name}
+                onChange={handleOnchangeDetails}
+                name="name"
+              />
             </Form.Item>
-            <Form.Item label="Số điện thoại" name="phone" rules={[{ required: true, message: 'Vui lòng nhập số điện thoại!' }]}>
-              <InputComponent value={stateUserDetails.phone} onChange={handleOnchangeDetails} name="phone" />
+            <Form.Item
+              label="Số điện thoại"
+              name="phone"
+              rules={[{ required: true, message: 'Vui lòng nhập số điện thoại!' }]}
+            >
+              <InputComponent
+                value={stateUserDetails.phone}
+                onChange={handleOnchangeDetails}
+                name="phone"
+              />
             </Form.Item>
-            <Form.Item label="Địa chỉ" name="address" rules={[{ required: true, message: 'Vui lòng nhập địa chỉ!' }]}>
-              <InputComponent value={stateUserDetails.address} onChange={handleOnchangeDetails} name="address" />
+            <Form.Item
+              label="Địa chỉ"
+              name="address"
+              rules={[{ required: true, message: 'Vui lòng nhập địa chỉ!' }]}
+            >
+              <InputComponent
+                value={stateUserDetails.address}
+                onChange={handleOnchangeDetails}
+                name="address"
+              />
             </Form.Item>
-            <Form.Item label="Thành phố" name="city" rules={[{ required: true, message: 'Vui lòng nhập thành phố!' }]}>
-              <InputComponent value={stateUserDetails.city} onChange={handleOnchangeDetails} name="city" />
+            <Form.Item
+              label="Thành phố"
+              name="city"
+              rules={[{ required: true, message: 'Vui lòng nhập thành phố!' }]}
+            >
+              <InputComponent
+                value={stateUserDetails.city}
+                onChange={handleOnchangeDetails}
+                name="city"
+              />
             </Form.Item>
           </Form>
         </Loading>
