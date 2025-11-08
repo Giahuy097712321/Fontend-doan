@@ -18,7 +18,8 @@ import {
 
 const AdminChat = () => {
     const { socket } = useSocket();
-    const user = useSelector((state) => state.user);
+    // Xóa biến user không sử dụng
+    // const user = useSelector((state) => state.user);
     const [selectedUser, setSelectedUser] = useState(null);
     const [conversations, setConversations] = useState([]);
     const [messages, setMessages] = useState({});
@@ -44,6 +45,18 @@ const AdminChat = () => {
         setConversations(conversationsData);
         setLoading(false);
     }, []);
+
+    // User selection handler - ĐỊNH NGHĨA TRƯỚC để sử dụng trong handleReceiveMessage
+    const handleSelectUser = useCallback((userId) => {
+        console.log('👤 Selecting user:', userId);
+        setSelectedUser(userId);
+        setNewMessage('');
+
+        // Mark messages as read when selecting user
+        if (socket && userId) {
+            socket.emit('markMessagesAsRead', userId);
+        }
+    }, [socket]);
 
     // Trong AdminChat - sửa handleReceiveMessage
     const handleReceiveMessage = useCallback((message) => {
@@ -77,7 +90,7 @@ const AdminChat = () => {
                 });
             }
         }
-    }, [selectedUser, conversations]);
+    }, [selectedUser, conversations, handleSelectUser]); // THÊM handleSelectUser vào dependencies
 
     const handleChatHistory = useCallback((history) => {
         console.log('📚 Chat history received:', history.length, 'messages');
@@ -113,7 +126,6 @@ const AdminChat = () => {
     }, [socket]);
 
     // Socket setup
-    // Socket setup
     useEffect(() => {
         if (!socket) return;
 
@@ -121,7 +133,6 @@ const AdminChat = () => {
 
         socket.on('conversationsList', handleConversationsList);
         socket.on('receiveMessage', handleReceiveMessage);
-
         socket.on('chatHistory', handleChatHistory);
         socket.on('messageSent', handleMessageSent);
         socket.on('messagesRead', handleMessagesRead);
@@ -146,25 +157,13 @@ const AdminChat = () => {
         handleMessagesRead
     ]);
 
-    // Load chat history when user is selected1
+    // Load chat history when user is selected
     useEffect(() => {
         if (socket && selectedUser) {
             console.log('🔄 Loading chat history for:', selectedUser);
             socket.emit('getChatHistory', selectedUser);
         }
     }, [selectedUser, socket]);
-
-    // User selection handler
-    const handleSelectUser = useCallback((userId) => {
-        console.log('👤 Selecting user:', userId);
-        setSelectedUser(userId);
-        setNewMessage('');
-
-        // Mark messages as read when selecting user
-        if (socket && userId) {
-            socket.emit('markMessagesAsRead', userId);
-        }
-    }, [socket]);
 
     // Send message handler
     const handleSendMessage = useCallback(() => {
