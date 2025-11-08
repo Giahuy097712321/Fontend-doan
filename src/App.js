@@ -16,7 +16,7 @@ import ChatComponent from './components/ChatComponent/ChatComponent'
 // 🎯 Import Stripe
 import { Elements } from '@stripe/react-stripe-js'
 import { loadStripe } from '@stripe/stripe-js'
-import SocketStatus from './components/SocketStatus/SocketStatus';
+
 
 // ⚙️ Khởi tạo Stripe Public Key (test key từ Stripe Dashboard)
 const stripePromise = loadStripe(
