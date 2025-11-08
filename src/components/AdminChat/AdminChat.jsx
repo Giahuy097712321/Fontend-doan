@@ -1,4 +1,4 @@
-// src/components/AdminChat/AdminChat.jsx
+// src/components/AdminChat/AdminChat.jsx - SỬA LỖI LẶP VÔ HẠN
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSocket } from '../../contexts/SocketContext';
 import { useSelector } from 'react-redux';
@@ -13,18 +13,6 @@ import {
     ExclamationCircleOutlined
 } from '@ant-design/icons';
 import SocketStatus from '../SocketStatus/SocketStatus';
-import {
-    AdminChatContainer,
-    UsersList,
-    UserItem,
-    ChatPanel,
-    ChatHeader,
-    ChatMessages,
-    MessageItem,
-    MessageInput,
-    NoChatSelected,
-    ConnectionStatus
-} from './style';
 
 const AdminChat = () => {
     const { socket, isConnected } = useSocket();
@@ -37,19 +25,24 @@ const AdminChat = () => {
     const [isSending, setIsSending] = useState(false);
     const [initialLoad, setInitialLoad] = useState(true);
     const messagesEndRef = useRef(null);
-    const chatMessagesRef = useRef(null);
 
-    // Scroll to bottom function
+    // Scroll to bottom
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
 
-    // Auto scroll when messages change
     useEffect(() => {
         scrollToBottom();
     }, [messages, selectedUser]);
 
-    // Socket event handlers
+    // ✅ SỬA: Sử dụng useRef để tránh re-render vô hạn
+    const conversationsRef = useRef(conversations);
+
+    useEffect(() => {
+        conversationsRef.current = conversations;
+    }, [conversations]);
+
+    // Socket event handlers với useCallback ĐÚNG CÁCH
     const handleConversationsList = useCallback((conversationsData) => {
         console.log('📞 Conversations received:', conversationsData.length);
         setConversations(conversationsData);
@@ -59,27 +52,25 @@ const AdminChat = () => {
 
     const handleReceiveMessage = useCallback((message) => {
         console.log('📨 ADMIN: New message received:', message);
-        console.log('📨 Message details - senderId:', message.senderId, 'receiverId:', message.receiverId);
 
         setMessages(prev => {
             const existingMessages = prev[message.senderId] || [];
             const isDuplicate = existingMessages.some(msg => msg._id === message._id);
 
             if (isDuplicate) {
-                console.log('🚫 Duplicate message, skipping');
                 return prev;
             }
 
-            console.log('✅ Adding message to state for user:', message.senderId);
             return {
                 ...prev,
                 [message.senderId]: [...existingMessages, message]
             };
         });
 
-        // Show notification if not viewing this conversation
+        // ✅ SỬA: Sử dụng ref thay vì state trực tiếp
+        const currentConversations = conversationsRef.current;
         if (selectedUser !== message.senderId && message.senderId !== 'admin') {
-            const conversation = conversations.find(c => c.userId === message.senderId);
+            const conversation = currentConversations.find(c => c.userId === message.senderId);
             if (conversation) {
                 antMessage.info({
                     content: `Tin nhắn mới từ ${conversation.userName}`,
@@ -88,7 +79,7 @@ const AdminChat = () => {
                 });
             }
         }
-    }, [selectedUser, conversations]);
+    }, [selectedUser]); // ✅ CHỈ phụ thuộc vào selectedUser
 
     const handleChatHistory = useCallback((history) => {
         console.log('📚 Chat history received:', history.length, 'messages');
@@ -115,91 +106,58 @@ const AdminChat = () => {
         setIsSending(false);
     }, [selectedUser]);
 
-    const handleMessagesRead = useCallback((data) => {
-        console.log('✅ Messages marked as read:', data);
-        // Refresh conversations to update unread counts
-        if (socket) {
-            socket.emit('getConversations');
-        }
-    }, [socket]);
-
-    const handleAllMessagesRead = useCallback((data) => {
-        console.log('✅ All messages marked as read:', data);
-        if (socket) {
-            socket.emit('getConversations');
-        }
-        antMessage.success('Đã đánh dấu tất cả tin nhắn là đã đọc');
-    }, [socket]);
-
-    // Socket setup với error handling
+    // ✅ SỬA: Socket setup đơn giản hơn
     useEffect(() => {
-        if (!socket) {
-            console.log('⏳ Socket not available yet...');
+        if (!socket || !isConnected) {
+            console.log('⏳ Waiting for socket connection...');
             return;
         }
 
-        if (!isConnected) {
-            console.log('⚠️ Socket is not connected, waiting for connection...');
-            return;
-        }
-
-        console.log('🔗 AdminChat socket connected. Setting up listeners...');
+        console.log('🔗 Setting up AdminChat socket listeners...');
 
         // Setup event listeners
-        socket.on('conversationsList', handleConversationsList);
-        socket.on('receiveMessage', handleReceiveMessage);
-        socket.on('chatHistory', handleChatHistory);
-        socket.on('messageSent', handleMessageSent);
-        socket.on('messagesRead', handleMessagesRead);
-        socket.on('allMessagesRead', handleAllMessagesRead);
+        const listeners = {
+            conversationsList: handleConversationsList,
+            receiveMessage: handleReceiveMessage,
+            chatHistory: handleChatHistory,
+            messageSent: handleMessageSent,
+            conversationsError: (error) => {
+                console.error('❌ Conversations error:', error);
+                antMessage.error('Lỗi khi tải danh sách hội thoại');
+                setLoading(false);
+            },
+            chatHistoryError: (error) => {
+                console.error('❌ Chat history error:', error);
+                antMessage.error('Lỗi khi tải lịch sử chat');
+            },
+            messageError: (error) => {
+                console.error('❌ Message send error:', error);
+                antMessage.error('Lỗi khi gửi tin nhắn');
+                setIsSending(false);
+            }
+        };
 
-        // Error handlers
-        socket.on('conversationsError', (error) => {
-            console.error('❌ Conversations error:', error);
-            antMessage.error('Lỗi khi tải danh sách hội thoại');
-            setLoading(false);
+        // Đăng ký listeners
+        Object.entries(listeners).forEach(([event, handler]) => {
+            socket.on(event, handler);
         });
 
-        socket.on('chatHistoryError', (error) => {
-            console.error('❌ Chat history error:', error);
-            antMessage.error('Lỗi khi tải lịch sử chat');
-        });
-
-        socket.on('messageError', (error) => {
-            console.error('❌ Message send error:', error);
-            antMessage.error('Lỗi khi gửi tin nhắn');
-            setIsSending(false);
-        });
-
-        // Lấy danh sách hội thoại ngay khi vào
-        console.log('📡 Requesting conversations...');
-        setLoading(true);
-        socket.emit('getConversations');
+        // ✅ CHỈ gọi getConversations KHI CẦN THIẾT
+        if (conversations.length === 0) {
+            console.log('📡 Requesting conversations...');
+            setLoading(true);
+            socket.emit('getConversations');
+        }
 
         return () => {
             console.log('🧹 Cleaning up AdminChat listeners...');
-            socket.off('conversationsList', handleConversationsList);
-            socket.off('receiveMessage', handleReceiveMessage);
-            socket.off('chatHistory', handleChatHistory);
-            socket.off('messageSent', handleMessageSent);
-            socket.off('messagesRead', handleMessagesRead);
-            socket.off('allMessagesRead', handleAllMessagesRead);
-            socket.off('conversationsError');
-            socket.off('chatHistoryError');
-            socket.off('messageError');
+            Object.entries(listeners).forEach(([event, handler]) => {
+                socket.off(event, handler);
+            });
         };
-    }, [
-        socket,
-        isConnected,
-        handleConversationsList,
-        handleReceiveMessage,
-        handleChatHistory,
-        handleMessageSent,
-        handleMessagesRead,
-        handleAllMessagesRead
-    ]);
+    }, [socket, isConnected, handleConversationsList, handleReceiveMessage, handleChatHistory, handleMessageSent, conversations.length]); // ✅ THÊM conversations.length
 
-    // Load chat history when user is selected
+    // ✅ SỬA: Load chat history chỉ khi selectedUser thay đổi
     useEffect(() => {
         if (socket && isConnected && selectedUser) {
             console.log('🔄 Loading chat history for:', selectedUser);
@@ -213,7 +171,7 @@ const AdminChat = () => {
         setSelectedUser(userId);
         setNewMessage('');
 
-        // Mark messages as read when selecting user
+        // Mark messages as read khi chọn user
         if (socket && isConnected && userId) {
             socket.emit('markMessagesAsRead', userId);
         }
@@ -239,7 +197,7 @@ const AdminChat = () => {
 
             console.log('📤 Sending message:', messageData);
 
-            // Add temporary message to UI
+            // Add temporary message
             const tempMessage = {
                 ...messageData,
                 _id: `temp-${Date.now()}`,
@@ -252,7 +210,6 @@ const AdminChat = () => {
                 [selectedUser]: [...(prev[selectedUser] || []), tempMessage]
             }));
 
-            // Send via socket
             socket.emit('sendMessage', messageData);
             setNewMessage('');
         }
@@ -284,6 +241,7 @@ const AdminChat = () => {
     const markAllAsRead = useCallback(() => {
         if (socket && isConnected) {
             socket.emit('markAllMessagesAsRead');
+            antMessage.success('Đã đánh dấu tất cả tin nhắn là đã đọc');
         } else {
             antMessage.error('Không có kết nối, không thể đánh dấu đã đọc');
         }
@@ -298,7 +256,7 @@ const AdminChat = () => {
     const unreadConversations = conversations.filter(conv => conv.unreadCount > 0).length;
 
     return (
-        <AdminChatContainer>
+        <div style={{ padding: '20px', background: '#f5f5f5', minHeight: '100vh' }}>
             <Card
                 title={
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -325,33 +283,25 @@ const AdminChat = () => {
                                 onClick={markAllAsRead}
                                 disabled={!isConnected}
                             >
-                                Đánh dấu đã đọc tất cả
+                                Đánh dấu đã đọc
                             </Button>
                         )}
                     </div>
                 }
                 style={{ height: '600px' }}
-                extra={
-                    !isConnected && (
-                        <ConnectionStatus>
-                            <ExclamationCircleOutlined style={{ color: '#ff4d4f' }} />
-                            <span>Đang chờ kết nối...</span>
-                        </ConnectionStatus>
-                    )
-                }
             >
                 {initialLoad ? (
                     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '400px' }}>
                         <Spin size="large" tip="Đang kết nối chat..." />
                     </div>
                 ) : (
-                    <div className="chat-layout">
+                    <div style={{ display: 'flex', height: '500px', gap: '16px' }}>
                         {/* Users List */}
-                        <UsersList>
-                            <div className="users-header">
-                                <h4>Hội thoại ({conversations.length})</h4>
+                        <div style={{ width: '350px', background: 'white', border: '1px solid #f0f0f0' }}>
+                            <div style={{ padding: '16px', borderBottom: '1px solid #f0f0f0', background: '#fafafa' }}>
+                                <h4 style={{ margin: 0 }}>Hội thoại ({conversations.length})</h4>
                                 {totalUnread > 0 && (
-                                    <span className="unread-total">
+                                    <span style={{ fontSize: '12px', color: '#ff4d4f' }}>
                                         {totalUnread} tin nhắn chưa đọc
                                     </span>
                                 )}
@@ -360,12 +310,19 @@ const AdminChat = () => {
                                 dataSource={conversations}
                                 loading={loading}
                                 renderItem={(conversation) => (
-                                    <UserItem
+                                    <div
                                         key={conversation._id}
                                         onClick={() => handleSelectUser(conversation.userId)}
-                                        isSelected={selectedUser === conversation.userId}
-                                        hasUnread={conversation.unreadCount > 0}
-                                        disabled={!isConnected}
+                                        style={{
+                                            padding: '12px 16px',
+                                            borderBottom: '1px solid #f0f0f0',
+                                            cursor: 'pointer',
+                                            background: selectedUser === conversation.userId ? '#e6f7ff' : 'white',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '12px',
+                                            position: 'relative'
+                                        }}
                                     >
                                         <Avatar
                                             icon={<UserOutlined />}
@@ -374,17 +331,17 @@ const AdminChat = () => {
                                                 backgroundColor: conversation.unreadCount > 0 ? '#ff4d4f' : '#1890ff'
                                             }}
                                         />
-                                        <div className="user-info">
-                                            <div className="user-name">
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
                                                 {conversation.userName}
                                                 {conversation.unreadCount > 0 && (
-                                                    <span className="unread-indicator"></span>
+                                                    <span style={{ width: '6px', height: '6px', background: '#ff4d4f', borderRadius: '50%' }}></span>
                                                 )}
                                             </div>
-                                            <div className="last-message">
+                                            <div style={{ fontSize: '12px', color: '#8c8c8c', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                                 {conversation.lastMessage || 'Chưa có tin nhắn'}
                                             </div>
-                                            <div className="message-time">
+                                            <div style={{ fontSize: '11px', color: '#bfbfbf' }}>
                                                 {conversation.lastMessageTime ?
                                                     new Date(conversation.lastMessageTime).toLocaleTimeString('vi-VN') :
                                                     ''
@@ -392,36 +349,29 @@ const AdminChat = () => {
                                             </div>
                                         </div>
                                         {conversation.unreadCount > 0 && (
-                                            <Badge
-                                                count={conversation.unreadCount}
-                                                className="unread-badge"
-                                            />
+                                            <Badge count={conversation.unreadCount} />
                                         )}
-                                    </UserItem>
+                                    </div>
                                 )}
                                 locale={{ emptyText: 'Chưa có hội thoại nào' }}
                             />
-                        </UsersList>
+                        </div>
 
                         {/* Chat Panel */}
-                        <ChatPanel>
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', border: '1px solid #f0f0f0', background: 'white' }}>
                             {selectedUser ? (
                                 <>
-                                    <ChatHeader>
-                                        <Avatar
-                                            icon={<UserOutlined />}
-                                            size="default"
-                                            style={{ backgroundColor: '#1890ff' }}
-                                        />
-                                        <div className="user-details">
-                                            <div className="user-name">
+                                    <div style={{ padding: '16px', borderBottom: '1px solid #f0f0f0', background: '#fafafa', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                        <Avatar icon={<UserOutlined />} size="default" style={{ backgroundColor: '#1890ff' }} />
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ fontWeight: 'bold' }}>
                                                 {getSelectedConversation()?.userName || 'Người dùng'}
                                             </div>
-                                            <div className="user-id">
+                                            <div style={{ fontSize: '12px', color: '#8c8c8c' }}>
                                                 ID: {selectedUser}
                                             </div>
                                         </div>
-                                        <div className="chat-actions">
+                                        <div>
                                             <Button
                                                 size="small"
                                                 icon={<EyeOutlined />}
@@ -431,52 +381,58 @@ const AdminChat = () => {
                                                 Đánh dấu đã đọc
                                             </Button>
                                         </div>
-                                    </ChatHeader>
+                                    </div>
 
-                                    <ChatMessages ref={chatMessagesRef}>
+                                    <div style={{ flex: 1, padding: '16px', overflowY: 'auto', background: '#fafafa' }}>
                                         {messages[selectedUser]?.length > 0 ? (
-                                            <div className="messages-container">
+                                            <div>
                                                 {messages[selectedUser].map((message) => (
-                                                    <MessageItem
+                                                    <div
                                                         key={message._id || `temp-${message.timestamp}`}
-                                                        isOwn={message.senderId === 'admin'}
-                                                        isTemp={message.isTemp}
+                                                        style={{
+                                                            display: 'flex',
+                                                            justifyContent: message.senderId === 'admin' ? 'flex-end' : 'flex-start',
+                                                            marginBottom: '12px'
+                                                        }}
                                                     >
-                                                        <div className="message-content">
-                                                            <div className="message-text">{message.message}</div>
-                                                            <div className="message-time">
+                                                        <div
+                                                            style={{
+                                                                background: message.senderId === 'admin' ? '#1890ff' : 'white',
+                                                                color: message.senderId === 'admin' ? 'white' : '#262626',
+                                                                padding: '8px 12px',
+                                                                borderRadius: '12px',
+                                                                maxWidth: '70%',
+                                                                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
+                                                                opacity: message.isTemp ? 0.7 : 1
+                                                            }}
+                                                        >
+                                                            <div>{message.message}</div>
+                                                            <div style={{ fontSize: '10px', opacity: 0.8, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                                                 {new Date(message.timestamp).toLocaleTimeString('vi-VN')}
                                                                 {message.isTemp && (
-                                                                    <span className="sending-indicator"> • Đang gửi</span>
-                                                                )}
-                                                                {!isConnected && (
-                                                                    <span className="connection-warning"> • Mất kết nối</span>
+                                                                    <span style={{ fontStyle: 'italic' }}>• Đang gửi</span>
                                                                 )}
                                                             </div>
                                                         </div>
-                                                    </MessageItem>
+                                                    </div>
                                                 ))}
+                                                <div ref={messagesEndRef} />
                                             </div>
                                         ) : (
-                                            <div className="no-messages">
+                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#8c8c8c' }}>
                                                 <MessageOutlined style={{ fontSize: '32px', color: '#ccc', marginBottom: '8px' }} />
-                                                <p>Chưa có tin nhắn nào</p>
-                                                <span>Hãy bắt đầu cuộc trò chuyện</span>
+                                                <p style={{ margin: '4px 0', fontWeight: '500' }}>Chưa có tin nhắn nào</p>
+                                                <span style={{ fontSize: '12px' }}>Hãy bắt đầu cuộc trò chuyện</span>
                                             </div>
                                         )}
-                                        <div ref={messagesEndRef} />
-                                    </ChatMessages>
+                                    </div>
 
-                                    <MessageInput>
+                                    <div style={{ padding: '16px', borderTop: '1px solid #f0f0f0', display: 'flex', gap: '8px' }}>
                                         <Input.TextArea
                                             value={newMessage}
                                             onChange={handleInputChange}
                                             onKeyPress={handleKeyPress}
-                                            placeholder={
-                                                isConnected
-                                                    ? "Nhập tin nhắn hỗ trợ..."
-                                                    : "Đang mất kết nối, không thể gửi tin nhắn..."
-                                            }
+                                            placeholder={isConnected ? "Nhập tin nhắn hỗ trợ..." : "Đang mất kết nối..."}
                                             autoSize={{ minRows: 1, maxRows: 4 }}
                                             disabled={!isConnected}
                                         />
@@ -489,13 +445,13 @@ const AdminChat = () => {
                                         >
                                             Gửi
                                         </Button>
-                                    </MessageInput>
+                                    </div>
                                 </>
                             ) : (
-                                <NoChatSelected>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#8c8c8c' }}>
                                     <CommentOutlined style={{ fontSize: '48px', color: '#ccc', marginBottom: '16px' }} />
-                                    <h3>Chọn hội thoại để bắt đầu trò chuyện</h3>
-                                    <p>Danh sách hội thoại với khách hàng hiển thị ở bên trái</p>
+                                    <h3 style={{ margin: '8px 0', color: '#262626' }}>Chọn hội thoại để bắt đầu trò chuyện</h3>
+                                    <p style={{ marginBottom: '24px' }}>Danh sách hội thoại với khách hàng hiển thị ở bên trái</p>
                                     {!isConnected && (
                                         <div style={{
                                             background: '#fff2f0',
@@ -510,27 +466,27 @@ const AdminChat = () => {
                                             </span>
                                         </div>
                                     )}
-                                    <div className="stats">
-                                        <div className="stat-item">
-                                            <span className="stat-number">{conversations.length}</span>
-                                            <span className="stat-label">Tổng hội thoại</span>
+                                    <div style={{ display: 'flex', gap: '32px', marginTop: '24px' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#1890ff' }}>{conversations.length}</span>
+                                            <span style={{ fontSize: '12px', color: '#8c8c8c', marginTop: '4px' }}>Tổng hội thoại</span>
                                         </div>
-                                        <div className="stat-item">
-                                            <span className="stat-number">{totalUnread}</span>
-                                            <span className="stat-label">Tin nhắn chưa đọc</span>
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#1890ff' }}>{totalUnread}</span>
+                                            <span style={{ fontSize: '12px', color: '#8c8c8c', marginTop: '4px' }}>Tin nhắn chưa đọc</span>
                                         </div>
-                                        <div className="stat-item">
-                                            <span className="stat-number">{unreadConversations}</span>
-                                            <span className="stat-label">Hội thoại chưa đọc</span>
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#1890ff' }}>{unreadConversations}</span>
+                                            <span style={{ fontSize: '12px', color: '#8c8c8c', marginTop: '4px' }}>Hội thoại chưa đọc</span>
                                         </div>
                                     </div>
-                                </NoChatSelected>
+                                </div>
                             )}
-                        </ChatPanel>
+                        </div>
                     </div>
                 )}
             </Card>
-        </AdminChatContainer>
+        </div>
     );
 };
 
