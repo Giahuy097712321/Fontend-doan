@@ -1,8 +1,8 @@
-// src/components/AdminChat/AdminChat.jsx - SỬA LỖI LẶP VÔ HẠN
+// src/components/AdminChat/AdminChat.jsx - HOÀN CHỈNH VỚI AVATAR
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSocket } from '../../contexts/SocketContext';
 import { useSelector } from 'react-redux';
-import { Input, Button, Avatar, Badge, List, Card, message as antMessage, Spin } from 'antd';
+import { Input, Button, Avatar, Badge, List, Card, message as antMessage, Spin, Tooltip } from 'antd';
 import {
     SendOutlined,
     UserOutlined,
@@ -10,7 +10,8 @@ import {
     CommentOutlined,
     EyeOutlined,
     ReloadOutlined,
-    ExclamationCircleOutlined
+    ExclamationCircleOutlined,
+    MailOutlined
 } from '@ant-design/icons';
 import SocketStatus from '../SocketStatus/SocketStatus';
 
@@ -35,16 +36,16 @@ const AdminChat = () => {
         scrollToBottom();
     }, [messages, selectedUser]);
 
-    // ✅ SỬA: Sử dụng useRef để tránh re-render vô hạn
     const conversationsRef = useRef(conversations);
 
     useEffect(() => {
         conversationsRef.current = conversations;
     }, [conversations]);
 
-    // Socket event handlers với useCallback ĐÚNG CÁCH
+    // Socket event handlers
     const handleConversationsList = useCallback((conversationsData) => {
         console.log('📞 Conversations received:', conversationsData.length);
+        console.log('👤 User data sample:', conversationsData[0]); // Debug để xem dữ liệu user
         setConversations(conversationsData);
         setLoading(false);
         setInitialLoad(false);
@@ -67,7 +68,6 @@ const AdminChat = () => {
             };
         });
 
-        // ✅ SỬA: Sử dụng ref thay vì state trực tiếp
         const currentConversations = conversationsRef.current;
         if (selectedUser !== message.senderId && message.senderId !== 'admin') {
             const conversation = currentConversations.find(c => c.userId === message.senderId);
@@ -79,7 +79,7 @@ const AdminChat = () => {
                 });
             }
         }
-    }, [selectedUser]); // ✅ CHỈ phụ thuộc vào selectedUser
+    }, [selectedUser]);
 
     const handleChatHistory = useCallback((history) => {
         console.log('📚 Chat history received:', history.length, 'messages');
@@ -106,7 +106,7 @@ const AdminChat = () => {
         setIsSending(false);
     }, [selectedUser]);
 
-    // ✅ SỬA: Socket setup đơn giản hơn
+    // Socket setup
     useEffect(() => {
         if (!socket || !isConnected) {
             console.log('⏳ Waiting for socket connection...');
@@ -115,7 +115,6 @@ const AdminChat = () => {
 
         console.log('🔗 Setting up AdminChat socket listeners...');
 
-        // Setup event listeners
         const listeners = {
             conversationsList: handleConversationsList,
             receiveMessage: handleReceiveMessage,
@@ -137,12 +136,10 @@ const AdminChat = () => {
             }
         };
 
-        // Đăng ký listeners
         Object.entries(listeners).forEach(([event, handler]) => {
             socket.on(event, handler);
         });
 
-        // ✅ CHỈ gọi getConversations KHI CẦN THIẾT
         if (conversations.length === 0) {
             console.log('📡 Requesting conversations...');
             setLoading(true);
@@ -155,9 +152,8 @@ const AdminChat = () => {
                 socket.off(event, handler);
             });
         };
-    }, [socket, isConnected, handleConversationsList, handleReceiveMessage, handleChatHistory, handleMessageSent, conversations.length]); // ✅ THÊM conversations.length
+    }, [socket, isConnected, handleConversationsList, handleReceiveMessage, handleChatHistory, handleMessageSent, conversations.length]);
 
-    // ✅ SỬA: Load chat history chỉ khi selectedUser thay đổi
     useEffect(() => {
         if (socket && isConnected && selectedUser) {
             console.log('🔄 Loading chat history for:', selectedUser);
@@ -165,19 +161,16 @@ const AdminChat = () => {
         }
     }, [selectedUser, socket, isConnected]);
 
-    // User selection handler
     const handleSelectUser = useCallback((userId) => {
         console.log('👤 Selecting user:', userId);
         setSelectedUser(userId);
         setNewMessage('');
 
-        // Mark messages as read khi chọn user
         if (socket && isConnected && userId) {
             socket.emit('markMessagesAsRead', userId);
         }
     }, [socket, isConnected]);
 
-    // Send message handler
     const handleSendMessage = useCallback(() => {
         if (!isConnected) {
             antMessage.error('Mất kết nối, không thể gửi tin nhắn');
@@ -197,7 +190,6 @@ const AdminChat = () => {
 
             console.log('📤 Sending message:', messageData);
 
-            // Add temporary message
             const tempMessage = {
                 ...messageData,
                 _id: `temp-${Date.now()}`,
@@ -215,7 +207,6 @@ const AdminChat = () => {
         }
     }, [newMessage, socket, selectedUser, isSending, isConnected]);
 
-    // Input handlers
     const handleKeyPress = useCallback((e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
@@ -227,7 +218,6 @@ const AdminChat = () => {
         setNewMessage(e.target.value);
     }, []);
 
-    // Utility functions
     const refreshConversations = useCallback(() => {
         if (socket && isConnected) {
             setLoading(true);
@@ -251,7 +241,29 @@ const AdminChat = () => {
         return conversations.find(c => c.userId === selectedUser);
     };
 
-    // Calculate stats
+    // ✅ HÀM HIỂN THỊ AVATAR
+    const renderUserAvatar = (conversation, size = 'small') => {
+        if (conversation.userAvatar) {
+            return (
+                <Avatar
+                    src={conversation.userAvatar}
+                    size={size}
+                    alt={conversation.userName}
+                />
+            );
+        }
+        return (
+            <Avatar
+                icon={<UserOutlined />}
+                size={size}
+                style={{
+                    backgroundColor: conversation.unreadCount > 0 ? '#ff4d4f' : '#1890ff',
+                    ...(size === 'default' ? { fontSize: '24px' } : {})
+                }}
+            />
+        );
+    };
+
     const totalUnread = conversations.reduce((sum, conv) => sum + (conv.unreadCount || 0), 0);
     const unreadConversations = conversations.filter(conv => conv.unreadCount > 0).length;
 
@@ -324,21 +336,35 @@ const AdminChat = () => {
                                             position: 'relative'
                                         }}
                                     >
-                                        <Avatar
-                                            icon={<UserOutlined />}
-                                            size="small"
-                                            style={{
-                                                backgroundColor: conversation.unreadCount > 0 ? '#ff4d4f' : '#1890ff'
-                                            }}
-                                        />
-                                        <div style={{ flex: 1 }}>
+                                        {/* ✅ AVATAR NGƯỜI DÙNG */}
+                                        {renderUserAvatar(conversation, 'small')}
+
+                                        <div style={{ flex: 1, minWidth: 0 }}>
                                             <div style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                {conversation.userName}
+                                                <span style={{
+                                                    whiteSpace: 'nowrap',
+                                                    overflow: 'hidden',
+                                                    textOverflow: 'ellipsis'
+                                                }}>
+                                                    {conversation.userName}
+                                                </span>
                                                 {conversation.unreadCount > 0 && (
-                                                    <span style={{ width: '6px', height: '6px', background: '#ff4d4f', borderRadius: '50%' }}></span>
+                                                    <span style={{
+                                                        width: '6px',
+                                                        height: '6px',
+                                                        background: '#ff4d4f',
+                                                        borderRadius: '50%',
+                                                        flexShrink: 0
+                                                    }}></span>
                                                 )}
                                             </div>
-                                            <div style={{ fontSize: '12px', color: '#8c8c8c', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            <div style={{
+                                                fontSize: '12px',
+                                                color: '#8c8c8c',
+                                                whiteSpace: 'nowrap',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis'
+                                            }}>
                                                 {conversation.lastMessage || 'Chưa có tin nhắn'}
                                             </div>
                                             <div style={{ fontSize: '11px', color: '#bfbfbf' }}>
@@ -361,14 +387,34 @@ const AdminChat = () => {
                         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', border: '1px solid #f0f0f0', background: 'white' }}>
                             {selectedUser ? (
                                 <>
-                                    <div style={{ padding: '16px', borderBottom: '1px solid #f0f0f0', background: '#fafafa', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                        <Avatar icon={<UserOutlined />} size="default" style={{ backgroundColor: '#1890ff' }} />
+                                    <div style={{
+                                        padding: '16px',
+                                        borderBottom: '1px solid #f0f0f0',
+                                        background: '#fafafa',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '12px'
+                                    }}>
+                                        {/* ✅ AVATAR TRONG HEADER */}
+                                        {renderUserAvatar(getSelectedConversation() || {}, 'default')}
+
                                         <div style={{ flex: 1 }}>
-                                            <div style={{ fontWeight: 'bold' }}>
+                                            <div style={{ fontWeight: 'bold', fontSize: '16px' }}>
                                                 {getSelectedConversation()?.userName || 'Người dùng'}
                                             </div>
-                                            <div style={{ fontSize: '12px', color: '#8c8c8c' }}>
-                                                ID: {selectedUser}
+                                            <div style={{ fontSize: '12px', color: '#8c8c8c', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                <span>ID: {selectedUser}</span>
+                                                {getSelectedConversation()?.userEmail && (
+                                                    <>
+                                                        <span>•</span>
+                                                        <Tooltip title="Email người dùng">
+                                                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                                <MailOutlined />
+                                                                {getSelectedConversation()?.userEmail}
+                                                            </span>
+                                                        </Tooltip>
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
                                         <div>
