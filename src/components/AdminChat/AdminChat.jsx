@@ -1,8 +1,8 @@
-// src/components/AdminChat/AdminChat.jsx - HOÀN CHỈNH VỚI AVATAR VÀ TÊN
+// src/components/AdminChat/AdminChat.jsx - FIX HIỂN THỊ TÊN NGƯỜI DÙNG
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSocket } from '../../contexts/SocketContext';
 import { useSelector } from 'react-redux';
-import { Input, Button, Avatar, Badge, List, Card, message as antMessage, Spin, Tooltip, Tag } from 'antd';
+import { Input, Button, Badge, List, Card, message as antMessage, Spin, Tooltip, Tag } from 'antd';
 import {
     SendOutlined,
     UserOutlined,
@@ -11,7 +11,6 @@ import {
     EyeOutlined,
     ReloadOutlined,
     ExclamationCircleOutlined,
-    MailOutlined,
     ClockCircleOutlined
 } from '@ant-design/icons';
 import SocketStatus from '../SocketStatus/SocketStatus';
@@ -44,13 +43,17 @@ const AdminChat = () => {
     }, [conversations]);
 
     // Socket event handlers
+    // Trong component - THÊM DEBUG CHI TIẾT
+    // Trong component - TẠM THỜI DÙNG CÁCH NÀY
     const handleConversationsList = useCallback((conversationsData) => {
-        console.log('📞 Conversations received:', conversationsData.length);
-        console.log('👤 User data sample:', conversationsData[0]); // Debug để xem dữ liệu user
+        console.log('📞 Conversations received with REAL names:', conversationsData);
+
+        // ✅ KHÔNG CẦN XỬ LÝ THÊM - SERVER ĐÃ GỬI TÊN THẬT
         setConversations(conversationsData);
         setLoading(false);
         setInitialLoad(false);
     }, []);
+
 
     const handleReceiveMessage = useCallback((message) => {
         console.log('📨 ADMIN: New message received:', message);
@@ -74,9 +77,8 @@ const AdminChat = () => {
             const conversation = currentConversations.find(c => c.userId === message.senderId);
             if (conversation) {
                 antMessage.info({
-                    content: `Tin nhắn mới từ ${conversation.userName}`,
+                    content: `Tin nhắn mới từ ${conversation.displayName || conversation.userName}`,
                     duration: 3,
-                    icon: renderUserAvatar(conversation, 'small'),
                     onClick: () => handleSelectUser(message.senderId)
                 });
             }
@@ -243,35 +245,11 @@ const AdminChat = () => {
         return conversations.find(c => c.userId === selectedUser);
     };
 
-    // ✅ HÀM HIỂN THỊ AVATAR - CẢI THIỆN
-    const renderUserAvatar = (conversation, size = 'small') => {
-        const avatarSize = size === 'small' ? 32 : 40;
-
-        if (conversation.userAvatar) {
-            return (
-                <Avatar
-                    src={conversation.userAvatar}
-                    size={avatarSize}
-                    alt={conversation.userName}
-                    style={{
-                        border: conversation.unreadCount > 0 ? '2px solid #ff4d4f' : 'none'
-                    }}
-                />
-            );
-        }
-
-        return (
-            <Avatar
-                icon={<UserOutlined />}
-                size={avatarSize}
-                style={{
-                    backgroundColor: conversation.unreadCount > 0 ? '#ff4d4f' : '#1890ff',
-                    border: conversation.unreadCount > 0 ? '2px solid #ff4d4f' : 'none'
-                }}
-            >
-                {conversation.userName ? conversation.userName.charAt(0).toUpperCase() : 'U'}
-            </Avatar>
-        );
+    // ✅ HÀM LẤY TÊN HIỂN THỊ
+    // ✅ HÀM LẤY TÊN HIỂN THỊ
+    const getDisplayName = (conversation) => {
+        if (!conversation) return 'Người dùng';
+        return conversation.userName || 'Người dùng';
     };
 
     // ✅ HÀM ĐỊNH DẠNG THỜI GIAN
@@ -368,7 +346,7 @@ const AdminChat = () => {
                                             cursor: 'pointer',
                                             background: selectedUser === conversation.userId ? '#e6f7ff' : 'white',
                                             display: 'flex',
-                                            alignItems: 'flex-start',
+                                            alignItems: 'center',
                                             gap: '12px',
                                             position: 'relative',
                                             transition: 'all 0.2s',
@@ -381,8 +359,11 @@ const AdminChat = () => {
                                             e.currentTarget.style.background = selectedUser === conversation.userId ? '#e6f7ff' : 'white';
                                         }}
                                     >
-                                        {/* ✅ AVATAR NGƯỜI DÙNG */}
-                                        {renderUserAvatar(conversation, 'small')}
+                                        {/* Icon user thay cho avatar */}
+                                        <UserOutlined style={{
+                                            color: conversation.unreadCount > 0 ? '#ff4d4f' : '#1890ff',
+                                            fontSize: '16px'
+                                        }} />
 
                                         <div style={{ flex: 1, minWidth: 0 }}>
                                             <div style={{
@@ -399,7 +380,7 @@ const AdminChat = () => {
                                                     color: conversation.unreadCount > 0 ? '#1890ff' : '#262626',
                                                     fontWeight: conversation.unreadCount > 0 ? '600' : '500'
                                                 }}>
-                                                    {conversation.userName || 'Người dùng'}
+                                                    {getDisplayName(conversation)}
                                                 </span>
                                             </div>
                                             <div style={{
@@ -465,15 +446,16 @@ const AdminChat = () => {
                                         gap: '12px',
                                         borderRadius: '8px 8px 0 0'
                                     }}>
-                                        {/* ✅ AVATAR TRONG HEADER */}
-                                        {renderUserAvatar(getSelectedConversation() || {}, 'default')}
+                                        {/* Icon user */}
+                                        <UserOutlined style={{
+                                            fontSize: '24px',
+                                            color: '#1890ff'
+                                        }} />
 
                                         <div style={{ flex: 1 }}>
                                             <div style={{ fontWeight: 'bold', fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                {getSelectedConversation()?.userName || 'Người dùng'}
-                                                {getSelectedConversation()?.isActive && (
-                                                    <Tag color="green" size="small">Đang hoạt động</Tag>
-                                                )}
+                                                {getDisplayName(getSelectedConversation() || {})}
+                                                <Tag color="green" size="small">Đang hoạt động</Tag>
                                             </div>
                                             <div style={{ fontSize: '12px', color: '#8c8c8c', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '2px' }}>
                                                 <Tooltip title="ID người dùng">
@@ -482,17 +464,6 @@ const AdminChat = () => {
                                                         {selectedUser}
                                                     </span>
                                                 </Tooltip>
-                                                {getSelectedConversation()?.userEmail && (
-                                                    <>
-                                                        <span>•</span>
-                                                        <Tooltip title="Email người dùng">
-                                                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                                <MailOutlined />
-                                                                {getSelectedConversation()?.userEmail}
-                                                            </span>
-                                                        </Tooltip>
-                                                    </>
-                                                )}
                                             </div>
                                         </div>
                                         <div>
@@ -522,11 +493,11 @@ const AdminChat = () => {
                                                         }}
                                                     >
                                                         {message.senderId !== 'admin' && (
-                                                            <Avatar
-                                                                size="small"
-                                                                icon={<UserOutlined />}
-                                                                src={getSelectedConversation()?.userAvatar}
-                                                            />
+                                                            <UserOutlined style={{
+                                                                color: '#52c41a',
+                                                                fontSize: '14px',
+                                                                marginTop: '4px'
+                                                            }} />
                                                         )}
                                                         <div
                                                             style={{
@@ -559,11 +530,11 @@ const AdminChat = () => {
                                                             </div>
                                                         </div>
                                                         {message.senderId === 'admin' && (
-                                                            <Avatar
-                                                                size="small"
-                                                                icon={<UserOutlined />}
-                                                                style={{ backgroundColor: '#1890ff' }}
-                                                            />
+                                                            <UserOutlined style={{
+                                                                color: '#1890ff',
+                                                                fontSize: '14px',
+                                                                marginTop: '4px'
+                                                            }} />
                                                         )}
                                                     </div>
                                                 ))}
