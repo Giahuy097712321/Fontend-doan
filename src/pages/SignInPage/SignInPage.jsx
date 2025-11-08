@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { WrapperContainer, WrapperContainerLeft, WrapperContainerRight, WrapperTextLight, LogoContainer, BrandName, Tagline } from './style';
 import InputForm from './../../components/InputForm/InputFrom';
 import ButtonComponent from './../../components/ButtonComponent/ButtonComponent';
@@ -49,6 +49,23 @@ const SignInPage = () => {
     return Object.keys(newErrors).length === 0
   }
 
+  // Định nghĩa handleGetDetailsUser với useCallback
+  const handleGetDetailsUser = useCallback(async (id, token) => {
+    try {
+      const res = await UserService.getDetailsUser(id, token)
+      if (res?.data) {
+        dispatch(updateUser({
+          ...res.data,
+          id: res.data.id || res.data._id,
+          access_token: token
+        }))
+      }
+    } catch (error) {
+      console.error('Lỗi khi lấy thông tin user:', error)
+      message.error('Lỗi khi tải thông tin người dùng')
+    }
+  }, [dispatch])
+
   useEffect(() => {
     if (isSuccess && data) {
       // Kiểm tra xem đăng nhập có thực sự thành công không
@@ -78,7 +95,7 @@ const SignInPage = () => {
         message.error(errorMessage)
       }
     }
-  }, [isSuccess, data])
+  }, [isSuccess, data, handleGetDetailsUser, location?.state, navigate])
 
   useEffect(() => {
     if (isError) {
@@ -101,22 +118,6 @@ const SignInPage = () => {
     }
 
     return errorMessages[message] || message
-  }
-
-  const handleGetDetailsUser = async (id, token) => {
-    try {
-      const res = await UserService.getDetailsUser(id, token)
-      if (res?.data) {
-        dispatch(updateUser({
-          ...res.data,
-          id: res.data.id || res.data._id,
-          access_token: token
-        }))
-      }
-    } catch (error) {
-      console.error('Lỗi khi lấy thông tin user:', error)
-      message.error('Lỗi khi tải thông tin người dùng')
-    }
   }
 
   const handleNavigateSignUp = () => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { WrapperContainer, WrapperContainerLeft, WrapperContainerRight, WrapperTextLight, LogoContainer, BrandName, Tagline } from './style';
 import InputForm from './../../components/InputForm/InputFrom';
 import ButtonComponent from './../../components/ButtonComponent/ButtonComponent';
@@ -27,6 +27,11 @@ const SignUpPage = () => {
 
     const { data, isLoading, isSuccess, isError } = mutation
 
+    // Định nghĩa handleNavigateSignIn với useCallback
+    const handleNavigateSignIn = useCallback(() => {
+        navigate('/sign-in')
+    }, [navigate])
+
     useEffect(() => {
         if (isSuccess) {
             message.success('Đăng ký thành công!')
@@ -34,7 +39,7 @@ const SignUpPage = () => {
                 handleNavigateSignIn()
             }, 1500)
         }
-    }, [isSuccess])
+    }, [isSuccess, handleNavigateSignIn])
 
     useEffect(() => {
         if (isError) {
@@ -54,8 +59,8 @@ const SignUpPage = () => {
 
         if (!password) {
             newErrors.password = 'Mật khẩu không được để trống'
-        } else if (password.length < 6) {
-            newErrors.password = 'Mật khẩu phải có ít nhất 6 ký tự'
+        } else if (password.length < 5) {
+            newErrors.password = 'Mật khẩu phải có ít nhất 5 ký tự'
         }
 
         if (!confirmPassword) {
@@ -91,10 +96,6 @@ const SignUpPage = () => {
         if (errors.confirmPassword) {
             setErrors(prev => ({ ...prev, confirmPassword: '' }))
         }
-    }
-
-    const handleNavigateSignIn = () => {
-        navigate('/sign-in')
     }
 
     const handleSignUp = () => {
