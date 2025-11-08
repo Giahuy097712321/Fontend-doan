@@ -4,9 +4,9 @@ import { useSocket } from '../../contexts/SocketContext';
 import { Badge, Tooltip, Button } from 'antd';
 import {
     WifiOutlined,
-    WifiOffOutlined,
+    DisconnectOutlined,
     SyncOutlined,
-    DisconnectOutlined
+    ExclamationCircleOutlined
 } from '@ant-design/icons';
 
 const SocketStatus = () => {
@@ -29,7 +29,7 @@ const SocketStatus = () => {
             };
         } else {
             return {
-                icon: <WifiOffOutlined />,
+                icon: <DisconnectOutlined />, // Sử dụng DisconnectOutlined thay vì WifiOffOutlined
                 color: '#ff4d4f',
                 text: 'Mất kết nối',
                 status: 'disconnected'
