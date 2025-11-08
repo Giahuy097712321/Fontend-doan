@@ -1,8 +1,8 @@
-// src/components/AdminChat/AdminChat.jsx - HOÀN CHỈNH VỚI AVATAR
+// src/components/AdminChat/AdminChat.jsx - HOÀN CHỈNH VỚI AVATAR VÀ TÊN
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSocket } from '../../contexts/SocketContext';
 import { useSelector } from 'react-redux';
-import { Input, Button, Avatar, Badge, List, Card, message as antMessage, Spin, Tooltip } from 'antd';
+import { Input, Button, Avatar, Badge, List, Card, message as antMessage, Spin, Tooltip, Tag } from 'antd';
 import {
     SendOutlined,
     UserOutlined,
@@ -11,7 +11,8 @@ import {
     EyeOutlined,
     ReloadOutlined,
     ExclamationCircleOutlined,
-    MailOutlined
+    MailOutlined,
+    ClockCircleOutlined
 } from '@ant-design/icons';
 import SocketStatus from '../SocketStatus/SocketStatus';
 
@@ -75,6 +76,7 @@ const AdminChat = () => {
                 antMessage.info({
                     content: `Tin nhắn mới từ ${conversation.userName}`,
                     duration: 3,
+                    icon: renderUserAvatar(conversation, 'small'),
                     onClick: () => handleSelectUser(message.senderId)
                 });
             }
@@ -241,27 +243,53 @@ const AdminChat = () => {
         return conversations.find(c => c.userId === selectedUser);
     };
 
-    // ✅ HÀM HIỂN THỊ AVATAR
+    // ✅ HÀM HIỂN THỊ AVATAR - CẢI THIỆN
     const renderUserAvatar = (conversation, size = 'small') => {
+        const avatarSize = size === 'small' ? 32 : 40;
+
         if (conversation.userAvatar) {
             return (
                 <Avatar
                     src={conversation.userAvatar}
-                    size={size}
+                    size={avatarSize}
                     alt={conversation.userName}
+                    style={{
+                        border: conversation.unreadCount > 0 ? '2px solid #ff4d4f' : 'none'
+                    }}
                 />
             );
         }
+
         return (
             <Avatar
                 icon={<UserOutlined />}
-                size={size}
+                size={avatarSize}
                 style={{
                     backgroundColor: conversation.unreadCount > 0 ? '#ff4d4f' : '#1890ff',
-                    ...(size === 'default' ? { fontSize: '24px' } : {})
+                    border: conversation.unreadCount > 0 ? '2px solid #ff4d4f' : 'none'
                 }}
-            />
+            >
+                {conversation.userName ? conversation.userName.charAt(0).toUpperCase() : 'U'}
+            </Avatar>
         );
+    };
+
+    // ✅ HÀM ĐỊNH DẠNG THỜI GIAN
+    const formatTime = (timestamp) => {
+        if (!timestamp) return '';
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) return 'Vừa xong';
+        if (diffMins < 60) return `${diffMins} phút trước`;
+        if (diffHours < 24) return `${diffHours} giờ trước`;
+        if (diffDays < 7) return `${diffDays} ngày trước`;
+
+        return date.toLocaleDateString('vi-VN');
     };
 
     const totalUnread = conversations.reduce((sum, conv) => sum + (conv.unreadCount || 0), 0);
@@ -309,18 +337,27 @@ const AdminChat = () => {
                 ) : (
                     <div style={{ display: 'flex', height: '500px', gap: '16px' }}>
                         {/* Users List */}
-                        <div style={{ width: '350px', background: 'white', border: '1px solid #f0f0f0' }}>
-                            <div style={{ padding: '16px', borderBottom: '1px solid #f0f0f0', background: '#fafafa' }}>
-                                <h4 style={{ margin: 0 }}>Hội thoại ({conversations.length})</h4>
+                        <div style={{ width: '350px', background: 'white', border: '1px solid #f0f0f0', borderRadius: '8px' }}>
+                            <div style={{ padding: '16px', borderBottom: '1px solid #f0f0f0', background: '#fafafa', borderRadius: '8px 8px 0 0' }}>
+                                <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <MessageOutlined />
+                                    Hội thoại ({conversations.length})
+                                </h4>
                                 {totalUnread > 0 && (
-                                    <span style={{ fontSize: '12px', color: '#ff4d4f' }}>
-                                        {totalUnread} tin nhắn chưa đọc
-                                    </span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                                        <Tag color="red" style={{ margin: 0 }}>
+                                            {totalUnread} tin nhắn chưa đọc
+                                        </Tag>
+                                        <Tag color="orange" style={{ margin: 0 }}>
+                                            {unreadConversations} hội thoại
+                                        </Tag>
+                                    </div>
                                 )}
                             </div>
                             <List
                                 dataSource={conversations}
                                 loading={loading}
+                                style={{ height: '428px', overflowY: 'auto' }}
                                 renderItem={(conversation) => (
                                     <div
                                         key={conversation._id}
@@ -331,60 +368,92 @@ const AdminChat = () => {
                                             cursor: 'pointer',
                                             background: selectedUser === conversation.userId ? '#e6f7ff' : 'white',
                                             display: 'flex',
-                                            alignItems: 'center',
+                                            alignItems: 'flex-start',
                                             gap: '12px',
-                                            position: 'relative'
+                                            position: 'relative',
+                                            transition: 'all 0.2s',
+                                            borderLeft: selectedUser === conversation.userId ? '3px solid #1890ff' : '3px solid transparent'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            e.currentTarget.style.background = selectedUser === conversation.userId ? '#e6f7ff' : '#f5f5f5';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.background = selectedUser === conversation.userId ? '#e6f7ff' : 'white';
                                         }}
                                     >
                                         {/* ✅ AVATAR NGƯỜI DÙNG */}
                                         {renderUserAvatar(conversation, 'small')}
 
                                         <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <div style={{
+                                                fontWeight: 'bold',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '6px',
+                                                marginBottom: '4px'
+                                            }}>
                                                 <span style={{
                                                     whiteSpace: 'nowrap',
                                                     overflow: 'hidden',
-                                                    textOverflow: 'ellipsis'
+                                                    textOverflow: 'ellipsis',
+                                                    color: conversation.unreadCount > 0 ? '#1890ff' : '#262626',
+                                                    fontWeight: conversation.unreadCount > 0 ? '600' : '500'
                                                 }}>
-                                                    {conversation.userName}
+                                                    {conversation.userName || 'Người dùng'}
                                                 </span>
-                                                {conversation.unreadCount > 0 && (
-                                                    <span style={{
-                                                        width: '6px',
-                                                        height: '6px',
-                                                        background: '#ff4d4f',
-                                                        borderRadius: '50%',
-                                                        flexShrink: 0
-                                                    }}></span>
-                                                )}
                                             </div>
                                             <div style={{
-                                                fontSize: '12px',
-                                                color: '#8c8c8c',
+                                                fontSize: '13px',
+                                                color: '#595959',
                                                 whiteSpace: 'nowrap',
                                                 overflow: 'hidden',
-                                                textOverflow: 'ellipsis'
+                                                textOverflow: 'ellipsis',
+                                                marginBottom: '2px'
                                             }}>
                                                 {conversation.lastMessage || 'Chưa có tin nhắn'}
                                             </div>
-                                            <div style={{ fontSize: '11px', color: '#bfbfbf' }}>
+                                            <div style={{
+                                                fontSize: '11px',
+                                                color: '#8c8c8c',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '4px'
+                                            }}>
+                                                <ClockCircleOutlined style={{ fontSize: '10px' }} />
                                                 {conversation.lastMessageTime ?
-                                                    new Date(conversation.lastMessageTime).toLocaleTimeString('vi-VN') :
-                                                    ''
+                                                    formatTime(conversation.lastMessageTime) :
+                                                    'Chưa có tin nhắn'
                                                 }
                                             </div>
                                         </div>
                                         {conversation.unreadCount > 0 && (
-                                            <Badge count={conversation.unreadCount} />
+                                            <Badge
+                                                count={conversation.unreadCount}
+                                                style={{
+                                                    backgroundColor: '#ff4d4f',
+                                                    flexShrink: 0
+                                                }}
+                                            />
                                         )}
                                     </div>
                                 )}
-                                locale={{ emptyText: 'Chưa có hội thoại nào' }}
+                                locale={{
+                                    emptyText: (
+                                        <div style={{
+                                            textAlign: 'center',
+                                            padding: '40px 20px',
+                                            color: '#8c8c8c'
+                                        }}>
+                                            <MessageOutlined style={{ fontSize: '32px', marginBottom: '8px' }} />
+                                            <div>Chưa có hội thoại nào</div>
+                                        </div>
+                                    )
+                                }}
                             />
                         </div>
 
                         {/* Chat Panel */}
-                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', border: '1px solid #f0f0f0', background: 'white' }}>
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', border: '1px solid #f0f0f0', background: 'white', borderRadius: '8px' }}>
                             {selectedUser ? (
                                 <>
                                     <div style={{
@@ -393,17 +462,26 @@ const AdminChat = () => {
                                         background: '#fafafa',
                                         display: 'flex',
                                         alignItems: 'center',
-                                        gap: '12px'
+                                        gap: '12px',
+                                        borderRadius: '8px 8px 0 0'
                                     }}>
                                         {/* ✅ AVATAR TRONG HEADER */}
                                         {renderUserAvatar(getSelectedConversation() || {}, 'default')}
 
                                         <div style={{ flex: 1 }}>
-                                            <div style={{ fontWeight: 'bold', fontSize: '16px' }}>
+                                            <div style={{ fontWeight: 'bold', fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                 {getSelectedConversation()?.userName || 'Người dùng'}
+                                                {getSelectedConversation()?.isActive && (
+                                                    <Tag color="green" size="small">Đang hoạt động</Tag>
+                                                )}
                                             </div>
-                                            <div style={{ fontSize: '12px', color: '#8c8c8c', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                                <span>ID: {selectedUser}</span>
+                                            <div style={{ fontSize: '12px', color: '#8c8c8c', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '2px' }}>
+                                                <Tooltip title="ID người dùng">
+                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        <UserOutlined />
+                                                        {selectedUser}
+                                                    </span>
+                                                </Tooltip>
                                                 {getSelectedConversation()?.userEmail && (
                                                     <>
                                                         <span>•</span>
@@ -438,9 +516,18 @@ const AdminChat = () => {
                                                         style={{
                                                             display: 'flex',
                                                             justifyContent: message.senderId === 'admin' ? 'flex-end' : 'flex-start',
-                                                            marginBottom: '12px'
+                                                            marginBottom: '12px',
+                                                            alignItems: 'flex-start',
+                                                            gap: '8px'
                                                         }}
                                                     >
+                                                        {message.senderId !== 'admin' && (
+                                                            <Avatar
+                                                                size="small"
+                                                                icon={<UserOutlined />}
+                                                                src={getSelectedConversation()?.userAvatar}
+                                                            />
+                                                        )}
                                                         <div
                                                             style={{
                                                                 background: message.senderId === 'admin' ? '#1890ff' : 'white',
@@ -449,31 +536,62 @@ const AdminChat = () => {
                                                                 borderRadius: '12px',
                                                                 maxWidth: '70%',
                                                                 boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
-                                                                opacity: message.isTemp ? 0.7 : 1
+                                                                opacity: message.isTemp ? 0.7 : 1,
+                                                                border: message.senderId !== 'admin' ? '1px solid #f0f0f0' : 'none'
                                                             }}
                                                         >
                                                             <div>{message.message}</div>
-                                                            <div style={{ fontSize: '10px', opacity: 0.8, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                                {new Date(message.timestamp).toLocaleTimeString('vi-VN')}
+                                                            <div style={{
+                                                                fontSize: '10px',
+                                                                opacity: 0.8,
+                                                                marginTop: '4px',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: '4px'
+                                                            }}>
+                                                                {new Date(message.timestamp).toLocaleTimeString('vi-VN', {
+                                                                    hour: '2-digit',
+                                                                    minute: '2-digit'
+                                                                })}
                                                                 {message.isTemp && (
                                                                     <span style={{ fontStyle: 'italic' }}>• Đang gửi</span>
                                                                 )}
                                                             </div>
                                                         </div>
+                                                        {message.senderId === 'admin' && (
+                                                            <Avatar
+                                                                size="small"
+                                                                icon={<UserOutlined />}
+                                                                style={{ backgroundColor: '#1890ff' }}
+                                                            />
+                                                        )}
                                                     </div>
                                                 ))}
                                                 <div ref={messagesEndRef} />
                                             </div>
                                         ) : (
-                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#8c8c8c' }}>
-                                                <MessageOutlined style={{ fontSize: '32px', color: '#ccc', marginBottom: '8px' }} />
-                                                <p style={{ margin: '4px 0', fontWeight: '500' }}>Chưa có tin nhắn nào</p>
-                                                <span style={{ fontSize: '12px' }}>Hãy bắt đầu cuộc trò chuyện</span>
+                                            <div style={{
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                height: '100%',
+                                                color: '#8c8c8c'
+                                            }}>
+                                                <MessageOutlined style={{ fontSize: '48px', color: '#ccc', marginBottom: '16px' }} />
+                                                <p style={{ margin: '4px 0', fontWeight: '500', color: '#262626' }}>Chưa có tin nhắn nào</p>
+                                                <span style={{ fontSize: '14px' }}>Hãy bắt đầu cuộc trò chuyện với khách hàng</span>
                                             </div>
                                         )}
                                     </div>
 
-                                    <div style={{ padding: '16px', borderTop: '1px solid #f0f0f0', display: 'flex', gap: '8px' }}>
+                                    <div style={{
+                                        padding: '16px',
+                                        borderTop: '1px solid #f0f0f0',
+                                        display: 'flex',
+                                        gap: '8px',
+                                        borderRadius: '0 0 8px 8px'
+                                    }}>
                                         <Input.TextArea
                                             value={newMessage}
                                             onChange={handleInputChange}
@@ -481,6 +599,7 @@ const AdminChat = () => {
                                             placeholder={isConnected ? "Nhập tin nhắn hỗ trợ..." : "Đang mất kết nối..."}
                                             autoSize={{ minRows: 1, maxRows: 4 }}
                                             disabled={!isConnected}
+                                            style={{ borderRadius: '6px' }}
                                         />
                                         <Button
                                             type="primary"
@@ -488,26 +607,35 @@ const AdminChat = () => {
                                             onClick={handleSendMessage}
                                             disabled={!newMessage.trim() || !isConnected}
                                             loading={isSending}
+                                            style={{ borderRadius: '6px' }}
                                         >
                                             Gửi
                                         </Button>
                                     </div>
                                 </>
                             ) : (
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#8c8c8c' }}>
-                                    <CommentOutlined style={{ fontSize: '48px', color: '#ccc', marginBottom: '16px' }} />
+                                <div style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    height: '100%',
+                                    color: '#8c8c8c'
+                                }}>
+                                    <CommentOutlined style={{ fontSize: '64px', color: '#ccc', marginBottom: '16px' }} />
                                     <h3 style={{ margin: '8px 0', color: '#262626' }}>Chọn hội thoại để bắt đầu trò chuyện</h3>
-                                    <p style={{ marginBottom: '24px' }}>Danh sách hội thoại với khách hàng hiển thị ở bên trái</p>
+                                    <p style={{ marginBottom: '24px', textAlign: 'center' }}>Danh sách hội thoại với khách hàng hiển thị ở bên trái</p>
                                     {!isConnected && (
                                         <div style={{
                                             background: '#fff2f0',
                                             border: '1px solid #ffccc7',
-                                            padding: '12px',
+                                            padding: '12px 16px',
                                             borderRadius: '6px',
-                                            margin: '16px 0'
+                                            margin: '16px 0',
+                                            maxWidth: '300px'
                                         }}>
-                                            <ExclamationCircleOutlined style={{ color: '#ff4d4f' }} />
-                                            <span style={{ marginLeft: '8px' }}>
+                                            <ExclamationCircleOutlined style={{ color: '#ff4d4f', marginRight: '8px' }} />
+                                            <span>
                                                 Đang chờ kết nối chat server...
                                             </span>
                                         </div>
@@ -518,11 +646,11 @@ const AdminChat = () => {
                                             <span style={{ fontSize: '12px', color: '#8c8c8c', marginTop: '4px' }}>Tổng hội thoại</span>
                                         </div>
                                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                            <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#1890ff' }}>{totalUnread}</span>
+                                            <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#ff4d4f' }}>{totalUnread}</span>
                                             <span style={{ fontSize: '12px', color: '#8c8c8c', marginTop: '4px' }}>Tin nhắn chưa đọc</span>
                                         </div>
                                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                            <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#1890ff' }}>{unreadConversations}</span>
+                                            <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#faad14' }}>{unreadConversations}</span>
                                             <span style={{ fontSize: '12px', color: '#8c8c8c', marginTop: '4px' }}>Hội thoại chưa đọc</span>
                                         </div>
                                     </div>
