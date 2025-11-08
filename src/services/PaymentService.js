@@ -1,4 +1,6 @@
-import axios from "axios"
+// XÓA DÒNG IMPORT AXIOS KHÔNG SỬ DỤNG
+// import axios from "axios"
+
 import { axiosJWT } from "./UserService"
 
 export const createPaymentIntent = async (totalPrice, token) => {
