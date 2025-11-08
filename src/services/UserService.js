@@ -108,12 +108,23 @@ export const changePassword = async (id, data, access_token) => {
 };
 
 // Quên mật khẩu - gửi OTP
+// Quên mật khẩu - gửi OTP
 export const forgotPassword = async (email) => {
-    const res = await axios.post(
-        `${process.env.REACT_APP_API_URL}/user/forgot-password`,
-        { email }
-    );
-    return res.data;
+    console.log('🔄 [Frontend] Gọi forgotPassword với email:', email);
+    console.log('🔗 URL:', `${process.env.REACT_APP_API_URL}/user/forgot-password`);
+
+    try {
+        const res = await axios.post(
+            `${process.env.REACT_APP_API_URL}/user/forgot-password`,
+            { email }
+        );
+        console.log('✅ [Frontend] Response:', res.data);
+        return res.data;
+    } catch (error) {
+        console.error('❌ [Frontend] Lỗi:', error.response?.data || error.message);
+        console.error('❌ [Frontend] Status:', error.response?.status);
+        throw error;
+    }
 };
 
 // Reset mật khẩu với OTP
