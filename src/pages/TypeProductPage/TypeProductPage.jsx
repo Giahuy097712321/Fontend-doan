@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import NavBarComponent from './../../components/NavbarComponent/NavbarComponent';
 import CardComponent from './../../components/CardComponent/CardComponent';
 import { Row, Col, Slider, Select, Button } from 'antd';
@@ -56,8 +56,8 @@ const TypeProductPage = () => {
     }
   }
 
-  // Áp dụng tất cả filter và sort
-  const applyFiltersAndSort = () => {
+  // Áp dụng tất cả filter và sort - DÙNG useCallback
+  const applyFiltersAndSort = useCallback(() => {
     let result = [...allProducts]
 
     // Filter theo search
@@ -102,7 +102,7 @@ const TypeProductPage = () => {
     }
 
     setFilteredProducts(result)
-  }
+  }, [allProducts, searchDebounce, priceRange, selectedRating, sortOption])
 
   // Reset tất cả filter
   const resetFilters = () => {
@@ -121,7 +121,7 @@ const TypeProductPage = () => {
 
   useEffect(() => {
     applyFiltersAndSort()
-  }, [searchDebounce, priceRange, selectedRating, sortOption, allProducts])
+  }, [applyFiltersAndSort]) // CHỈ CẦN applyFiltersAndSort VÌ NÓ ĐÃ CÓ TẤT CẢ DEPENDENCIES
 
   const handleSortChange = (value) => {
     setSortOption(value)
