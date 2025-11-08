@@ -45,6 +45,7 @@ export const SocketProvider = ({ children }) => {
                 timeout: 20000,
                 forceNew: false,
                 autoConnect: true,
+                maxPayload: 10e6, // 10MB client-side
                 query: {
                     userId: user.id,
                     userName: user.name,
