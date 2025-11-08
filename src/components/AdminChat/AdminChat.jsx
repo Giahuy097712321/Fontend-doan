@@ -1,4 +1,3 @@
-// src/components/AdminChat/AdminChat.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSocket } from '../../contexts/SocketContext';
 import { useSelector } from 'react-redux';
@@ -18,8 +17,6 @@ import {
 
 const AdminChat = () => {
     const { socket } = useSocket();
-    // Xóa biến user không sử dụng
-    // const user = useSelector((state) => state.user);
     const [selectedUser, setSelectedUser] = useState(null);
     const [conversations, setConversations] = useState([]);
     const [messages, setMessages] = useState({});
@@ -46,7 +43,7 @@ const AdminChat = () => {
         setLoading(false);
     }, []);
 
-    // User selection handler - ĐỊNH NGHĨA TRƯỚC để sử dụng trong handleReceiveMessage
+    // User selection handler
     const handleSelectUser = useCallback((userId) => {
         console.log('👤 Selecting user:', userId);
         setSelectedUser(userId);
@@ -58,10 +55,52 @@ const AdminChat = () => {
         }
     }, [socket]);
 
-    // Trong AdminChat - sửa handleReceiveMessage
+    // 🔥 QUAN TRỌNG: Cập nhật conversations khi có tin nhắn mới
+    const updateConversationOnNewMessage = useCallback((message) => {
+        console.log('🔄 Updating conversations with new message:', message);
+
+        setConversations(prev => {
+            const updatedConversations = [...prev];
+            const conversationIndex = updatedConversations.findIndex(c => c.userId === message.senderId);
+
+            if (conversationIndex !== -1) {
+                // Cập nhật conversation hiện có
+                updatedConversations[conversationIndex] = {
+                    ...updatedConversations[conversationIndex],
+                    lastMessage: message.message,
+                    lastMessageTime: message.timestamp,
+                    unreadCount: selectedUser === message.senderId
+                        ? 0 // Nếu đang xem conversation này, reset unread count
+                        : (updatedConversations[conversationIndex].unreadCount || 0) + 1
+                };
+
+                // Đưa conversation lên đầu danh sách
+                const [updatedConversation] = updatedConversations.splice(conversationIndex, 1);
+                updatedConversations.unshift(updatedConversation);
+            } else {
+                // Tạo conversation mới nếu chưa tồn tại
+                const newConversation = {
+                    _id: `conv-${message.senderId}`,
+                    userId: message.senderId,
+                    userName: message.senderName || 'Người dùng',
+                    lastMessage: message.message,
+                    lastMessageTime: message.timestamp,
+                    unreadCount: selectedUser === message.senderId ? 0 : 1
+                };
+                updatedConversations.unshift(newConversation);
+            }
+
+            return updatedConversations;
+        });
+    }, [selectedUser]);
+
+    // Xử lý tin nhắn mới - ĐÃ SỬA
     const handleReceiveMessage = useCallback((message) => {
         console.log('📨 ADMIN: New message received:', message);
         console.log('📨 Message details - senderId:', message.senderId, 'receiverId:', message.receiverId);
+
+        // 🔥 CẬP NHẬT DANH SÁCH HỘI THOẠI NGAY LẬP TỨC
+        updateConversationOnNewMessage(message);
 
         setMessages(prev => {
             const existingMessages = prev[message.senderId] || [];
@@ -90,7 +129,7 @@ const AdminChat = () => {
                 });
             }
         }
-    }, [selectedUser, conversations, handleSelectUser]); // THÊM handleSelectUser vào dependencies
+    }, [selectedUser, conversations, handleSelectUser, updateConversationOnNewMessage]);
 
     const handleChatHistory = useCallback((history) => {
         console.log('📚 Chat history received:', history.length, 'messages');
@@ -105,6 +144,15 @@ const AdminChat = () => {
     const handleMessageSent = useCallback((data) => {
         console.log('✅ Message sent confirmation:', data);
         if (data.message && selectedUser) {
+            // 🔥 CẬP NHẬT CONVERSATION KHI ADMIN GỬI TIN NHẮN
+            updateConversationOnNewMessage({
+                senderId: 'admin',
+                senderName: 'Admin',
+                receiverId: selectedUser,
+                message: data.message.message,
+                timestamp: data.message.timestamp
+            });
+
             setMessages(prev => {
                 const existingMessages = prev[selectedUser] || [];
                 const filteredMessages = existingMessages.filter(msg => !msg.isTemp);
@@ -115,7 +163,7 @@ const AdminChat = () => {
             });
         }
         setIsSending(false);
-    }, [selectedUser]);
+    }, [selectedUser, updateConversationOnNewMessage]);
 
     const handleMessagesRead = useCallback((data) => {
         console.log('✅ Messages marked as read:', data);
