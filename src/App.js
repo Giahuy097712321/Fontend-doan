@@ -9,13 +9,14 @@ import * as UserService from '../src/services/UserService'
 import { useDispatch, useSelector } from 'react-redux'
 import { updateUser } from './redux/sildes/userSlide'
 import Loading from './components/LoadingComponent/Loading'
-
+import SocketStatus from './components/SocketStatus/SocketStatus'
 import { SocketProvider } from './contexts/SocketContext'
 import ChatComponent from './components/ChatComponent/ChatComponent'
 
 // 🎯 Import Stripe
 import { Elements } from '@stripe/react-stripe-js'
 import { loadStripe } from '@stripe/stripe-js'
+import SocketStatus from './components/SocketStatus/SocketStatus';
 
 // ⚙️ Khởi tạo Stripe Public Key (test key từ Stripe Dashboard)
 const stripePromise = loadStripe(
@@ -106,6 +107,7 @@ function App() {
 
             {/* 💬 Chat chỉ hiện với user thường */}
             {user?.id && !user?.isAdmin && <ChatComponent />}
+            <SocketStatus />
           </Router>
         </SocketProvider>
       </Elements>
