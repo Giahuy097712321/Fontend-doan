@@ -1,4 +1,3 @@
-// src/components/AdminChat/AdminChat.jsx - FIX HIỂN THỊ TÊN NGƯỜI DÙNG
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSocket } from '../../contexts/SocketContext';
 import { useSelector } from 'react-redux';
@@ -48,12 +47,10 @@ const AdminChat = () => {
 
         // ✅ KIỂM TRA VÀ XỬ LÝ DỮ LIỆU TRÙNG LẶP
         const uniqueConversations = conversationsData.reduce((acc, current) => {
-            // Kiểm tra xem conversation đã tồn tại chưa
             const existing = acc.find(item => item.userId === current.userId);
             if (!existing) {
                 acc.push(current);
             } else {
-                // Nếu đã tồn tại, ưu tiên conversation có unreadCount cao hơn hoặc lastMessageTime mới hơn
                 if ((current.unreadCount || 0) > (existing.unreadCount || 0) ||
                     new Date(current.lastMessageTime || 0) > new Date(existing.lastMessageTime || 0)) {
                     const index = acc.indexOf(existing);
@@ -72,6 +69,7 @@ const AdminChat = () => {
     const handleReceiveMessage = useCallback((message) => {
         console.log('📨 ADMIN: New message received:', message);
 
+        // ✅ FIX: CẬP NHẬT MESSAGES STATE
         setMessages(prev => {
             const existingMessages = prev[message.senderId] || [];
             const isDuplicate = existingMessages.some(msg => msg._id === message._id);
@@ -80,10 +78,13 @@ const AdminChat = () => {
                 return prev;
             }
 
-            return {
+            const updatedMessages = {
                 ...prev,
                 [message.senderId]: [...existingMessages, message]
             };
+
+            console.log('🔄 Messages state updated for user:', message.senderId);
+            return updatedMessages;
         });
 
         // Cập nhật conversations khi có tin nhắn mới
@@ -125,11 +126,20 @@ const AdminChat = () => {
 
     const handleChatHistory = useCallback((history) => {
         console.log('📚 Chat history received:', history.length, 'messages');
+        console.log('🎯 Current selected user:', selectedUser);
+
         if (selectedUser) {
-            setMessages(prev => ({
-                ...prev,
-                [selectedUser]: history
-            }));
+            setMessages(prev => {
+                const updatedMessages = {
+                    ...prev,
+                    [selectedUser]: history
+                };
+                console.log('🔄 Updated messages for selected user:', selectedUser);
+                return updatedMessages;
+            });
+
+            // ✅ FIX: SCROLL XUỐNG DƯỚI SAU KHI NHẬN LỊCH SỬ MỚI
+            setTimeout(scrollToBottom, 100);
         }
     }, [selectedUser]);
 
@@ -139,9 +149,12 @@ const AdminChat = () => {
             setMessages(prev => {
                 const existingMessages = prev[selectedUser] || [];
                 const filteredMessages = existingMessages.filter(msg => !msg.isTemp);
+                const updatedMessages = [...filteredMessages, data.message];
+
+                console.log('🔄 Final messages after sending:', updatedMessages.length);
                 return {
                     ...prev,
-                    [selectedUser]: [...filteredMessages, data.message]
+                    [selectedUser]: updatedMessages
                 };
             });
 
@@ -158,8 +171,31 @@ const AdminChat = () => {
                     return conv;
                 });
             });
+
+            // ✅ FIX: SCROLL XUỐNG DƯỚI SAU KHI GỬI TIN NHẮN
+            setTimeout(scrollToBottom, 100);
         }
         setIsSending(false);
+    }, [selectedUser]);
+
+    // ✅ FIX: THÊM REAL-TIME CHAT HISTORY UPDATES
+    const handleChatHistoryUpdate = useCallback((updatedHistory) => {
+        console.log('🔄 Real-time chat history update received:', updatedHistory.length, 'messages');
+        console.log('🎯 For selected user:', selectedUser);
+
+        if (selectedUser) {
+            setMessages(prev => {
+                const updatedMessages = {
+                    ...prev,
+                    [selectedUser]: updatedHistory
+                };
+                console.log('✅ Messages updated with real-time history');
+                return updatedMessages;
+            });
+
+            // Scroll xuống dưới sau khi cập nhật
+            setTimeout(scrollToBottom, 100);
+        }
     }, [selectedUser]);
 
     // Socket setup
@@ -196,6 +232,9 @@ const AdminChat = () => {
             socket.on(event, handler);
         });
 
+        // ✅ FIX: THÊM LISTENER CHO REAL-TIME UPDATES
+        socket.on('chatHistory', handleChatHistoryUpdate);
+
         if (conversations.length === 0) {
             console.log('📡 Requesting conversations...');
             setLoading(true);
@@ -207,8 +246,25 @@ const AdminChat = () => {
             Object.entries(listeners).forEach(([event, handler]) => {
                 socket.off(event, handler);
             });
+            socket.off('chatHistory', handleChatHistoryUpdate);
         };
-    }, [socket, isConnected, handleConversationsList, handleReceiveMessage, handleChatHistory, handleMessageSent, conversations.length]);
+    }, [socket, isConnected, handleConversationsList, handleReceiveMessage, handleChatHistory, handleMessageSent, handleChatHistoryUpdate, conversations.length]);
+
+    // ✅ FIX: THÊM REAL-TIME REFRESH KHI CÓ TIN NHẮN MỚI
+    useEffect(() => {
+        if (!socket || !isConnected || !selectedUser) return;
+
+        const handleNewMessageRefresh = () => {
+            console.log('🔄 New message received, refreshing chat history for:', selectedUser);
+            socket.emit('getChatHistory', selectedUser);
+        };
+
+        socket.on('receiveMessage', handleNewMessageRefresh);
+
+        return () => {
+            socket.off('receiveMessage', handleNewMessageRefresh);
+        };
+    }, [socket, isConnected, selectedUser]);
 
     useEffect(() => {
         if (socket && isConnected && selectedUser) {
@@ -221,15 +277,10 @@ const AdminChat = () => {
     const getDisplayName = (conversation) => {
         if (!conversation) return 'Người dùng';
 
-        // Ưu tiên hiển thị tên theo thứ tự: displayName -> userName -> userId
-        if (conversation.displayName && conversation.displayName !== 'Người dùng') {
-            return conversation.displayName;
-        }
         if (conversation.userName && conversation.userName !== 'Người dùng') {
             return conversation.userName;
         }
         if (conversation.userId) {
-            // Cắt ngắn userId để hiển thị đẹp hơn
             return `User-${conversation.userId.slice(-6)}`;
         }
 
@@ -252,6 +303,11 @@ const AdminChat = () => {
                         : conv
                 )
             );
+
+            // ✅ FIX: LOAD LẠI CHAT HISTORY KHI CHỌN USER
+            setTimeout(() => {
+                socket.emit('getChatHistory', userId);
+            }, 100);
         }
     }, [socket, isConnected]);
 
