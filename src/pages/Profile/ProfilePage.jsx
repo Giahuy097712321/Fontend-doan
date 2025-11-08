@@ -1,5 +1,10 @@
-import React, { useState, useEffect } from 'react'
-import { WrapperContentProfile, WrapperHeader, WrapperInput, WrapperLabel, WrapperUploadFile } from './style'
+import React, { useState, useEffect, useCallback } from 'react'
+import {
+  WrapperHeader,
+  WrapperInput,
+  WrapperLabel,
+  WrapperUploadFile
+} from './style'
 import InputForm from './../../components/InputForm/InputFrom'
 import ButtonComponent from './../../components/ButtonComponent/ButtonComponent'
 import { useSelector, useDispatch } from 'react-redux'
@@ -9,7 +14,14 @@ import Loading from './../../components/LoadingComponent/Loading'
 import * as message from '../../components/Message/Message'
 import { updateUser } from '../../redux/sildes/userSlide'
 import { Button, Card, Row, Col } from 'antd'
-import { UploadOutlined, UserOutlined, MailOutlined, PhoneOutlined, EnvironmentOutlined, CameraOutlined, LockOutlined } from '@ant-design/icons'
+import {
+  UserOutlined,
+  MailOutlined,
+  PhoneOutlined,
+  EnvironmentOutlined,
+  CameraOutlined,
+  LockOutlined
+} from '@ant-design/icons'
 import { getBase64 } from '../../utils'
 import ChangePassword from '../../components/ChangePasswordComponent/ChangePassword'
 import ForgotPassword from '../../components/ForgotPasswordComponent/ForgotPassword'
@@ -41,14 +53,32 @@ const ProfilePage = () => {
     setAvatar(user?.avatar || '')
   }, [user])
 
+  // Định nghĩa handleGetDetailsUser với useCallback
+  const handleGetDetailsUser = useCallback(async (id, token) => {
+    try {
+      const res = await UserService.getDetailsUser(id, token)
+      if (res?.data) {
+        dispatch(updateUser({
+          ...res.data,
+          id: res.data._id,
+          access_token: token
+        }))
+      }
+    } catch (error) {
+      console.log("❌ Lỗi lấy chi tiết user:", error)
+    }
+  }, [dispatch])
+
   useEffect(() => {
     if (isSuccess) {
       message.success('Cập nhật thành công!')
-      handleGetDetailsUser(user?.id, user?.access_token)
+      if (user?.id && user?.access_token) {
+        handleGetDetailsUser(user.id, user.access_token)
+      }
     } else if (isError) {
       message.error('Cập nhật thất bại!')
     }
-  }, [isSuccess, isError])
+  }, [isSuccess, isError, user?.id, user?.access_token, handleGetDetailsUser])
 
   const handleUpdate = () => {
     if (!user?.id) {
@@ -65,21 +95,6 @@ const ProfilePage = () => {
       avatar,
       access_token: user?.access_token,
     })
-  }
-
-  const handleGetDetailsUser = async (id, token) => {
-    try {
-      const res = await UserService.getDetailsUser(id, token)
-      if (res?.data) {
-        dispatch(updateUser({
-          ...res.data,
-          id: res.data._id,
-          access_token: token
-        }))
-      }
-    } catch (error) {
-      console.log("❌ Lỗi lấy chi tiết user:", error)
-    }
   }
 
   const handleOnchangeAvatar = async ({ fileList }) => {
