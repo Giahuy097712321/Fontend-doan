@@ -146,7 +146,7 @@ const AdminChat = () => {
         handleMessagesRead
     ]);
 
-    // Load chat history when user is selected
+    // Load chat history when user is selected1
     useEffect(() => {
         if (socket && selectedUser) {
             console.log('🔄 Loading chat history for:', selectedUser);
