@@ -9,8 +9,10 @@ import Loading from './../../components/LoadingComponent/Loading'
 import * as message from '../../components/Message/Message'
 import { updateUser } from '../../redux/sildes/userSlide'
 import { Button, Card, Row, Col } from 'antd'
-import { UploadOutlined, UserOutlined, MailOutlined, PhoneOutlined, EnvironmentOutlined, CameraOutlined } from '@ant-design/icons'
+import { UploadOutlined, UserOutlined, MailOutlined, PhoneOutlined, EnvironmentOutlined, CameraOutlined, LockOutlined } from '@ant-design/icons'
 import { getBase64 } from '../../utils'
+import ChangePassword from '../../components/ChangePasswordComponent/ChangePassword'
+import ForgotPassword from '../../components/ForgotPasswordComponent/ForgotPassword'
 
 const ProfilePage = () => {
   const user = useSelector((state) => state.user)
@@ -19,6 +21,8 @@ const ProfilePage = () => {
   const [phone, setPhone] = useState('')
   const [address, setAddress] = useState('')
   const [avatar, setAvatar] = useState('')
+  const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false)
+  const [isForgotPasswordModalOpen, setIsForgotPasswordModalOpen] = useState(false)
   const dispatch = useDispatch()
 
   const mutation = useMutationHooks((data) => {
@@ -107,6 +111,27 @@ const ProfilePage = () => {
           fontSize: '20px',
           fontWeight: '600'
         }}
+        extra={
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <Button
+              icon={<LockOutlined />}
+              onClick={() => setIsChangePasswordModalOpen(true)}
+              style={{
+                background: 'linear-gradient(135deg, #52c41a 0%, #389e0d 100%)',
+                border: 'none',
+                color: '#fff'
+              }}
+            >
+              Đổi mật khẩu
+            </Button>
+            <Button
+              type="link"
+              onClick={() => setIsForgotPasswordModalOpen(true)}
+            >
+              Quên mật khẩu?
+            </Button>
+          </div>
+        }
       >
         <Loading isLoading={isLoading}>
           <Row gutter={[32, 32]}>
@@ -358,6 +383,17 @@ const ProfilePage = () => {
           </div>
         </Loading>
       </Card>
+
+      {/* Modals */}
+      <ChangePassword
+        isModalOpen={isChangePasswordModalOpen}
+        setIsModalOpen={setIsChangePasswordModalOpen}
+      />
+
+      <ForgotPassword
+        isModalOpen={isForgotPasswordModalOpen}
+        setIsModalOpen={setIsForgotPasswordModalOpen}
+      />
     </div>
   )
 }

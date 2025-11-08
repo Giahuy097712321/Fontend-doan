@@ -240,6 +240,11 @@ const SignInPage = () => {
                   {" "}Đăng ký ngay
                 </WrapperTextLight>
               </p>
+              <p style={{ marginTop: '10px' }}>
+                <WrapperTextLight onClick={() => navigate('/forgot-password')}>
+                  Quên mật khẩu?
+                </WrapperTextLight>
+              </p>
             </div>
           </div>
         </WrapperContainerLeft>
