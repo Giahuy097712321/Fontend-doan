@@ -43,17 +43,31 @@ const AdminChat = () => {
     }, [conversations]);
 
     // Socket event handlers
-    // Trong component - THÊM DEBUG CHI TIẾT
-    // Trong component - TẠM THỜI DÙNG CÁCH NÀY
     const handleConversationsList = useCallback((conversationsData) => {
-        console.log('📞 Conversations received with REAL names:', conversationsData);
+        console.log('📞 Conversations received:', conversationsData);
 
-        // ✅ KHÔNG CẦN XỬ LÝ THÊM - SERVER ĐÃ GỬI TÊN THẬT
-        setConversations(conversationsData);
+        // ✅ KIỂM TRA VÀ XỬ LÝ DỮ LIỆU TRÙNG LẶP
+        const uniqueConversations = conversationsData.reduce((acc, current) => {
+            // Kiểm tra xem conversation đã tồn tại chưa
+            const existing = acc.find(item => item.userId === current.userId);
+            if (!existing) {
+                acc.push(current);
+            } else {
+                // Nếu đã tồn tại, ưu tiên conversation có unreadCount cao hơn hoặc lastMessageTime mới hơn
+                if ((current.unreadCount || 0) > (existing.unreadCount || 0) ||
+                    new Date(current.lastMessageTime || 0) > new Date(existing.lastMessageTime || 0)) {
+                    const index = acc.indexOf(existing);
+                    acc[index] = current;
+                }
+            }
+            return acc;
+        }, []);
+
+        console.log('✅ Unique conversations:', uniqueConversations);
+        setConversations(uniqueConversations);
         setLoading(false);
         setInitialLoad(false);
     }, []);
-
 
     const handleReceiveMessage = useCallback((message) => {
         console.log('📨 ADMIN: New message received:', message);
@@ -72,12 +86,36 @@ const AdminChat = () => {
             };
         });
 
+        // Cập nhật conversations khi có tin nhắn mới
+        setConversations(prev => {
+            const updatedConversations = prev.map(conv => {
+                if (conv.userId === message.senderId) {
+                    return {
+                        ...conv,
+                        lastMessage: message.message,
+                        lastMessageTime: message.timestamp,
+                        unreadCount: (conv.unreadCount || 0) + (message.senderId !== 'admin' ? 1 : 0)
+                    };
+                }
+                return conv;
+            });
+
+            // Đưa conversation có tin nhắn mới lên đầu
+            const conversationIndex = updatedConversations.findIndex(conv => conv.userId === message.senderId);
+            if (conversationIndex > 0) {
+                const [movedConversation] = updatedConversations.splice(conversationIndex, 1);
+                updatedConversations.unshift(movedConversation);
+            }
+
+            return updatedConversations;
+        });
+
         const currentConversations = conversationsRef.current;
         if (selectedUser !== message.senderId && message.senderId !== 'admin') {
             const conversation = currentConversations.find(c => c.userId === message.senderId);
             if (conversation) {
                 antMessage.info({
-                    content: `Tin nhắn mới từ ${conversation.displayName || conversation.userName}`,
+                    content: `Tin nhắn mới từ ${getDisplayName(conversation)}`,
                     duration: 3,
                     onClick: () => handleSelectUser(message.senderId)
                 });
@@ -105,6 +143,20 @@ const AdminChat = () => {
                     ...prev,
                     [selectedUser]: [...filteredMessages, data.message]
                 };
+            });
+
+            // Cập nhật last message trong conversations
+            setConversations(prev => {
+                return prev.map(conv => {
+                    if (conv.userId === selectedUser) {
+                        return {
+                            ...conv,
+                            lastMessage: data.message.message,
+                            lastMessageTime: data.message.timestamp
+                        };
+                    }
+                    return conv;
+                });
             });
         }
         setIsSending(false);
@@ -165,6 +217,25 @@ const AdminChat = () => {
         }
     }, [selectedUser, socket, isConnected]);
 
+    // ✅ HÀM LẤY TÊN HIỂN THỊ - FIXED
+    const getDisplayName = (conversation) => {
+        if (!conversation) return 'Người dùng';
+
+        // Ưu tiên hiển thị tên theo thứ tự: displayName -> userName -> userId
+        if (conversation.displayName && conversation.displayName !== 'Người dùng') {
+            return conversation.displayName;
+        }
+        if (conversation.userName && conversation.userName !== 'Người dùng') {
+            return conversation.userName;
+        }
+        if (conversation.userId) {
+            // Cắt ngắn userId để hiển thị đẹp hơn
+            return `User-${conversation.userId.slice(-6)}`;
+        }
+
+        return 'Người dùng';
+    };
+
     const handleSelectUser = useCallback((userId) => {
         console.log('👤 Selecting user:', userId);
         setSelectedUser(userId);
@@ -172,6 +243,15 @@ const AdminChat = () => {
 
         if (socket && isConnected && userId) {
             socket.emit('markMessagesAsRead', userId);
+
+            // Cập nhật unreadCount trong local state
+            setConversations(prev =>
+                prev.map(conv =>
+                    conv.userId === userId
+                        ? { ...conv, unreadCount: 0 }
+                        : conv
+                )
+            );
         }
     }, [socket, isConnected]);
 
@@ -235,6 +315,9 @@ const AdminChat = () => {
     const markAllAsRead = useCallback(() => {
         if (socket && isConnected) {
             socket.emit('markAllMessagesAsRead');
+            setConversations(prev =>
+                prev.map(conv => ({ ...conv, unreadCount: 0 }))
+            );
             antMessage.success('Đã đánh dấu tất cả tin nhắn là đã đọc');
         } else {
             antMessage.error('Không có kết nối, không thể đánh dấu đã đọc');
@@ -243,13 +326,6 @@ const AdminChat = () => {
 
     const getSelectedConversation = () => {
         return conversations.find(c => c.userId === selectedUser);
-    };
-
-    // ✅ HÀM LẤY TÊN HIỂN THỊ
-    // ✅ HÀM LẤY TÊN HIỂN THỊ
-    const getDisplayName = (conversation) => {
-        if (!conversation) return 'Người dùng';
-        return conversation.userName || 'Người dùng';
     };
 
     // ✅ HÀM ĐỊNH DẠNG THỜI GIAN
@@ -338,7 +414,7 @@ const AdminChat = () => {
                                 style={{ height: '428px', overflowY: 'auto' }}
                                 renderItem={(conversation) => (
                                     <div
-                                        key={conversation._id}
+                                        key={conversation._id || conversation.userId}
                                         onClick={() => handleSelectUser(conversation.userId)}
                                         style={{
                                             padding: '12px 16px',
