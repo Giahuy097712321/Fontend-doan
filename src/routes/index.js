@@ -12,6 +12,7 @@ import PaymentPage from './../pages/PaymentPage/PaymentPage';
 import OrderSuccess from './../pages/OrderSuccess/OrderSuccess';
 import MyOrderPage from './../pages/MyOrderPage/MyOrderPage';
 import DetailOrderPage from './../pages/DetailsOrderPage/DetailOrderPage';
+import ForgotPasswordPage from './../pages/ForgotPasswordPage/ForgotPasswordPage';
 export const routes = [
     {
         path: '/',
@@ -74,6 +75,11 @@ export const routes = [
     {
         path: '/sign-up',
         page: SignUpPage,
+        isShowHeader: false
+    },
+    {
+        path: '/forgot-password', // THÊM ROUTE MỚI
+        page: ForgotPasswordPage,
         isShowHeader: false
     },
     {
