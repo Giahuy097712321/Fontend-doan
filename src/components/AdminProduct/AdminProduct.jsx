@@ -1,16 +1,18 @@
 // AdminProduct.jsx
-import { Button, Form, Select, Input, Row, Col, Card, Statistic } from 'antd';
+import { Button, Form, Select, Input, Row, Col, Card, Statistic, Empty } from 'antd';
 import { PlusOutlined, DeleteOutlined, EditOutlined, SearchOutlined, ShoppingOutlined, StarOutlined, StockOutlined, AppstoreOutlined } from '@ant-design/icons';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   WrapperHeader,
   WrapperUploadFile,
   TableWrapper,
-  DashboardContainer,
-  StatsContainer,
-  ChartGrid,
+  ChartContainer,
   ChartCard,
   ChartTitle,
+  InfoCardContainer,
+  InfoCard,
+  InfoNumber,
+  InfoLabel,
   ActionButtons
 } from './style';
 
@@ -26,11 +28,9 @@ import DrawerComponent from './../DrawerCompoenent/DrawerComponent';
 import { useSelector } from 'react-redux';
 import ModalComponent from './../ModalComponent/ModalComponent';
 import { renderOptions } from '../../utils';
-import { Empty } from 'antd';
 import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  LineChart, Line, AreaChart, Area, ComposedChart
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, ComposedChart
 } from 'recharts';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D', '#FF6B6B', '#4ECDC4'];
@@ -165,48 +165,6 @@ const AdminProduct = () => {
       .slice(0, 8);
   }, [products]);
 
-  // Biểu đồ đánh giá theo loại
-  const ratingChartData = useMemo(() => {
-    if (!products?.data) return [];
-    const grouped = {};
-    products.data.forEach(product => {
-      const type = product.type || 'Khác';
-      if (!grouped[type]) {
-        grouped[type] = {
-          name: type,
-          totalRating: 0,
-          count: 0
-        };
-      }
-      grouped[type].count += 1;
-      grouped[type].totalRating += (product.rating || 0);
-    });
-
-    return Object.values(grouped)
-      .map(item => ({
-        name: item.name,
-        rating: Number((item.totalRating / item.count).toFixed(1)),
-        productCount: item.count
-      }))
-      .sort((a, b) => b.rating - a.rating)
-      .slice(0, 6);
-  }, [products]);
-
-  // Top sản phẩm có rating cao nhất
-  const topRatedProducts = useMemo(() => {
-    if (!products?.data) return [];
-    return products.data
-      .filter(product => product.rating > 0)
-      .sort((a, b) => b.rating - a.rating)
-      .slice(0, 5)
-      .map(product => ({
-        name: product.name.length > 20 ? product.name.substring(0, 20) + '...' : product.name,
-        rating: product.rating,
-        price: product.price,
-        stock: product.countInStock
-      }));
-  }, [products]);
-
   const handleEditProduct = async (id) => {
     setIsOpenDrawer(true);
     setIsLoadingUpdate(true);
@@ -235,27 +193,17 @@ const AdminProduct = () => {
 
   const renderAction = (record) => (
     <ActionButtons>
-      <Button
-        type="primary"
-        icon={<EditOutlined />}
-        size="small"
+      <EditOutlined
+        style={{ color: 'orange', fontSize: '18px', cursor: 'pointer', marginRight: '8px' }}
         onClick={() => handleEditProduct(record._id)}
-        style={{ backgroundColor: '#faad14', borderColor: '#faad14' }}
-      >
-        Sửa
-      </Button>
-      <Button
-        type="primary"
-        danger
-        icon={<DeleteOutlined />}
-        size="small"
+      />
+      <DeleteOutlined
+        style={{ color: 'red', fontSize: '18px', cursor: 'pointer' }}
         onClick={() => {
           setIsModalOpenDelete(true);
           setRowSelected(record._id);
         }}
-      >
-        Xóa
-      </Button>
+      />
     </ActionButtons>
   );
 
@@ -354,7 +302,7 @@ const AdminProduct = () => {
     {
       title: 'Hành động',
       render: (_, record) => renderAction(record),
-      width: 150,
+      width: 100,
       fixed: 'right'
     },
   ];
@@ -455,134 +403,90 @@ const AdminProduct = () => {
   const handleChangeSelect = (value) => setStateProduct({ ...stateProduct, type: value });
 
   return (
-    <DashboardContainer>
-      <WrapperHeader>📊 Quản lý Sản phẩm</WrapperHeader>
+    <div>
+      <WrapperHeader>Quản lý sản phẩm</WrapperHeader>
 
-      {/* Thống kê tổng quan */}
-      <StatsContainer>
-        <Row gutter={[16, 16]}>
-          <Col xs={24} sm={12} lg={6}>
-            <Card>
-              <Statistic
-                title="Tổng sản phẩm"
-                value={totalProducts}
-                prefix={<ShoppingOutlined />}
-                valueStyle={{ color: '#1890ff' }}
+      {/* Info Card */}
+      <InfoCardContainer>
+        <InfoCard>
+          <InfoLabel>Tổng sản phẩm</InfoLabel>
+          <InfoNumber>{totalProducts}</InfoNumber>
+        </InfoCard>
+        <InfoCard>
+          <InfoLabel>Tổng tồn kho</InfoLabel>
+          <InfoNumber>{totalStock}</InfoNumber>
+        </InfoCard>
+        <InfoCard>
+          <InfoLabel>Đánh giá TB</InfoLabel>
+          <InfoNumber>{averageRating} ⭐</InfoNumber>
+        </InfoCard>
+        <InfoCard>
+          <InfoLabel>Loại sản phẩm</InfoLabel>
+          <InfoNumber>{totalTypes}</InfoNumber>
+        </InfoCard>
+      </InfoCardContainer>
+
+      {/* Charts */}
+      <ChartContainer>
+        <ChartCard>
+          <ChartTitle>Phân bố loại sản phẩm</ChartTitle>
+          <PieChart width={350} height={300}>
+            <Pie
+              dataKey="value"
+              data={typeChartData}
+              cx="50%"
+              cy="50%"
+              outerRadius={100}
+              fill="#8884d8"
+              label={({ name, value }) => `${name}: ${value}`}
+              isAnimationActive
+            >
+              {typeChartData.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.fill} />
+              ))}
+            </Pie>
+            <Tooltip formatter={(value) => `${value} sản phẩm`} />
+            <Legend verticalAlign="bottom" height={36} />
+          </PieChart>
+        </ChartCard>
+
+        <ChartCard>
+          <ChartTitle>Giá & Tồn kho theo loại</ChartTitle>
+          <ResponsiveContainer width="100%" height={300}>
+            <ComposedChart data={priceStockChartData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" angle={-45} textAnchor="end" height={60} />
+              <YAxis yAxisId="left" />
+              <YAxis yAxisId="right" orientation="right" />
+              <Tooltip
+                formatter={(value, name) => {
+                  if (name === 'avgPrice') return [`${value.toLocaleString('vi-VN')} VND`, 'Giá TB'];
+                  if (name === 'totalStock') return [`${value} sản phẩm`, 'Tồn kho'];
+                  return [value, name];
+                }}
               />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} lg={6}>
-            <Card>
-              <Statistic
-                title="Tổng tồn kho"
-                value={totalStock}
-                prefix={<StockOutlined />}
-                valueStyle={{ color: '#52c41a' }}
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} lg={6}>
-            <Card>
-              <Statistic
-                title="Đánh giá TB"
-                value={averageRating}
-                prefix={<StarOutlined />}
-                valueStyle={{ color: '#faad14' }}
-                suffix="⭐"
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} lg={6}>
-            <Card>
-              <Statistic
-                title="Loại sản phẩm"
-                value={totalTypes}
-                prefix={<AppstoreOutlined />}
-                valueStyle={{ color: '#722ed1' }}
-              />
-            </Card>
-          </Col>
-        </Row>
-      </StatsContainer>
+              <Legend />
+              <Bar yAxisId="left" dataKey="avgPrice" fill="#8884d8" name="Giá TB" />
+              <Bar yAxisId="right" dataKey="totalStock" fill="#82ca9d" name="Tồn kho" />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </ChartCard>
+      </ChartContainer>
 
-      {/* Biểu đồ */}
-      <ChartGrid>
-        <Row gutter={[16, 16]}>
-          {/* Biểu đồ phân bố loại sản phẩm */}
-          <Col xs={24} lg={12}>
-            <ChartCard>
-              <ChartTitle>📈 Phân bố loại sản phẩm</ChartTitle>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={typeChartData}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                    label={({ name, value }) => `${name}: ${value}`}
-                  >
-                    {typeChartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value) => [`${value} sản phẩm`, 'Số lượng']} />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </ChartCard>
-          </Col>
-
-          {/* Biểu đồ giá và tồn kho */}
-          <Col xs={24} lg={12}>
-            <ChartCard>
-              <ChartTitle>💰 Giá & Tồn kho theo loại</ChartTitle>
-              <ResponsiveContainer width="100%" height={300}>
-                <ComposedChart data={priceStockChartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" angle={-45} textAnchor="end" height={60} />
-                  <YAxis yAxisId="left" />
-                  <YAxis yAxisId="right" orientation="right" />
-                  <Tooltip
-                    formatter={(value, name) => {
-                      if (name === 'avgPrice') return [`${value.toLocaleString('vi-VN')} VND`, 'Giá TB'];
-                      if (name === 'totalStock') return [`${value} sản phẩm`, 'Tồn kho'];
-                      return [value, name];
-                    }}
-                  />
-                  <Legend />
-                  <Bar yAxisId="left" dataKey="avgPrice" fill="#8884d8" name="Giá TB" />
-                  <Line yAxisId="right" type="monotone" dataKey="totalStock" stroke="#ff7300" name="Tồn kho" />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </ChartCard>
-          </Col>
-
-
-        </Row>
-      </ChartGrid>
-
-      {/* Header bảng sản phẩm */}
+      {/* Header với nút thêm sản phẩm */}
       <div style={{ margin: '20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h3 style={{ margin: 0, color: '#1f2937' }}>Danh sách sản phẩm</h3>
+        <h3 style={{ margin: 0, color: '#333', fontSize: '18px', fontWeight: 'bold' }}>Danh sách sản phẩm</h3>
         <Button
           type="primary"
           icon={<PlusOutlined />}
           onClick={() => setIsModalOpen(true)}
           size="large"
-          style={{
-            backgroundColor: '#1890ff',
-            borderColor: '#1890ff',
-            borderRadius: '6px',
-            fontWeight: '600'
-          }}
         >
           Thêm sản phẩm
         </Button>
       </div>
 
-      {/* Bảng sản phẩm */}
+      {/* Table */}
       <TableWrapper>
         {dataTable.length ? (
           <TableComponent
@@ -593,17 +497,13 @@ const AdminProduct = () => {
             scroll={{ x: 1000 }}
           />
         ) : (
-          <Empty
-            description="Chưa có sản phẩm nào"
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            style={{ padding: '40px 0' }}
-          />
+          <Empty description="Chưa có sản phẩm nào" />
         )}
       </TableWrapper>
 
       {/* Modal tạo sản phẩm */}
       <ModalComponent
-        title="➕ Tạo Sản Phẩm Mới"
+        title="Tạo sản phẩm mới"
         open={isModalOpen}
         onCancel={handleCancel}
         footer={null}
@@ -692,21 +592,20 @@ const AdminProduct = () => {
 
       {/* Drawer cập nhật sản phẩm */}
       <DrawerComponent
-        title="✏️ Cập nhật Sản phẩm"
+        title="Cập nhật sản phẩm"
         isOpen={isOpenDrawer}
         onClose={handleCloseDrawer}
-        width="90%"
+        width="500px"
       >
         <Loading isLoading={isLoadingUpdate || isLoadingUpdated}>
           <Form
             name="update-product"
-            labelCol={{ span: 4 }}
-            wrapperCol={{ span: 20 }}
+            layout="vertical"
             onFinish={onUpdateProduct}
             autoComplete="off"
             form={formUpdate}
           >
-            <Form.Item label="Tên" name="name" rules={[{ required: true, message: 'Nhập tên!' }]}>
+            <Form.Item label="Tên sản phẩm" name="name" rules={[{ required: true, message: 'Nhập tên!' }]}>
               <InputComponent value={stateProductDetails.name} onChange={handleOnchangeDetails} name="name" />
             </Form.Item>
             <Form.Item label="Loại" name="type" rules={[{ required: true, message: 'Nhập loại!' }]}>
@@ -754,7 +653,7 @@ const AdminProduct = () => {
                 )}
               </WrapperUploadFile>
             </Form.Item>
-            <Form.Item wrapperCol={{ offset: 4, span: 20 }}>
+            <Form.Item>
               <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                 <Button onClick={handleCloseDrawer}>
                   Hủy
@@ -770,7 +669,7 @@ const AdminProduct = () => {
 
       {/* Modal xác nhận xóa */}
       <ModalComponent
-        title="🗑️ Xóa Sản Phẩm"
+        title="Xóa sản phẩm"
         open={isModalOpenDelete}
         onCancel={handleCancelDelete}
         onOk={handleDeleteProduct}
@@ -785,8 +684,8 @@ const AdminProduct = () => {
           </div>
         </Loading>
       </ModalComponent>
-    </DashboardContainer>
+    </div>
   );
 };
-//hihi
+
 export default AdminProduct;

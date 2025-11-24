@@ -2,104 +2,78 @@
 import styled from "styled-components";
 import { Upload } from 'antd';
 
-export const DashboardContainer = styled.div`
-  padding: 24px;
-  background: #f5f5f5;
-  min-height: 100vh;
-`;
-
 export const WrapperHeader = styled.h1`
-  color: #1f2937;
-  font-size: 28px;
-  font-weight: 700;
-  margin-bottom: 24px;
-  text-align: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+    color: #333;
+    font-size: 22px;
+    margin-bottom: 24px;
+    font-weight: bold;
 `;
 
-export const StatsContainer = styled.div`
-  margin-bottom: 32px;
-  
-  .ant-card {
+export const InfoCardContainer = styled.div`
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+`;
+
+export const InfoCard = styled.div`
+    flex: 1 1 20%;
+    background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+    padding: 16px;
     border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    border: none;
-    transition: transform 0.2s ease;
-    
+    box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+    text-align: center;
+    transition: transform 0.3s, box-shadow 0.3s;
     &:hover {
-      transform: translateY(-2px);
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.15);
     }
-  }
-  
-  .ant-statistic-title {
-    font-size: 14px;
-    color: #666;
-    font-weight: 500;
-  }
-  
-  .ant-statistic-content {
-    font-size: 24px;
-    font-weight: 600;
-  }
 `;
 
-export const ChartGrid = styled.div`
-  margin-bottom: 32px;
+export const InfoLabel = styled.div`
+    font-size: 14px;
+    color: #555;
+    margin-bottom: 8px;
+`;
+
+export const InfoNumber = styled.div`
+    font-size: 20px;
+    font-weight: bold;
+    color: #222;
+`;
+
+export const ChartContainer = styled.div`
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 24px;
 `;
 
 export const ChartCard = styled.div`
-  background: #fff;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  border: none;
-  height: 100%;
-  transition: transform 0.2s ease;
-  
-  &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
-  }
+    flex: 1 1 45%;
+    background: #fff;
+    padding: 16px;
+    border-radius: 16px;
+    box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+    transition: transform 0.3s, box-shadow 0.3s;
+    &:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+    }
 `;
 
 export const ChartTitle = styled.h3`
-  color: #1f2937;
-  font-size: 16px;
-  font-weight: 600;
-  margin-bottom: 20px;
-  text-align: center;
-  border-bottom: 2px solid #f0f0f0;
-  padding-bottom: 12px;
+    text-align: center;
+    margin-bottom: 16px;
+    font-weight: bold;
 `;
 
 export const TableWrapper = styled.div`
-  background: #fff;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  
-  .ant-table-thead > tr > th {
-    background: #f8f9fa;
-    font-weight: 600;
-    color: #1f2937;
-    border-bottom: 2px solid #e5e7eb;
-  }
-  
-  .ant-table-tbody > tr:hover > td {
-    background-color: #f0f9ff !important;
-  }
-  
-  .ant-table-container {
-    border-radius: 8px;
-    overflow: hidden;
-  }
-  
-  .ant-pagination {
-    margin-top: 20px;
-  }
+    background: #fff;
+    padding: 16px;
+    border-radius: 12px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
 `;
 
 export const WrapperUploadFile = styled(Upload)`
@@ -136,44 +110,5 @@ export const ActionButtons = styled.div`
     display: flex;
     align-items: center;
     gap: 4px;
-  }
-`;
-
-// Responsive adjustments
-export const ResponsiveStyles = styled.div`
-  @media (max-width: 768px) {
-    ${DashboardContainer} {
-      padding: 16px;
-    }
-    
-    ${WrapperHeader} {
-      font-size: 24px;
-    }
-    
-    ${ChartCard} {
-      padding: 16px;
-    }
-    
-    ${TableWrapper} {
-      padding: 16px;
-      overflow-x: auto;
-    }
-    
-    .ant-table-wrapper {
-      overflow-x: auto;
-    }
-  }
-  
-  @media (max-width: 576px) {
-    ${StatsContainer} {
-      .ant-col {
-        margin-bottom: 16px;
-      }
-    }
-    
-    ${ActionButtons} {
-      flex-direction: column;
-      gap: 4px;
-    }
   }
 `;

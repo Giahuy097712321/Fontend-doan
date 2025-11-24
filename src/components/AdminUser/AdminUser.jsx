@@ -1,5 +1,5 @@
 // AdminUser.jsx
-import { Button, Form, Select, Input } from 'antd';
+import { Button, Form, Select, Input, Empty } from 'antd';
 import { DeleteOutlined, EditOutlined, SearchOutlined } from '@ant-design/icons';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
@@ -18,6 +18,7 @@ import {
 import TableComponent from '../TableComponent/TableComponent';
 import InputComponent from './../InputComponent/InputComponent';
 import * as UserService from '../../services/UserService';
+import * as OrderService from '../../services/OrderService';
 import { getBase64 } from '../../utils';
 import { useMutationHooks } from './../../hooks/useMutationHook';
 import Loading from './../LoadingComponent/Loading';
@@ -27,11 +28,9 @@ import DrawerComponent from './../DrawerCompoenent/DrawerComponent';
 import { useSelector, useDispatch } from 'react-redux';
 import { updateUser } from '../../redux/sildes/userSlide';
 import ModalComponent from './../ModalComponent/ModalComponent';
-import { Empty } from 'antd';
 import { PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
 
 const COLORS_ADMIN = ['#0088FE', '#00C49F'];
-const COLORS_STATUS = ['#FF8042', '#8884D8'];
 
 const AdminUser = () => {
     const [rowSelected, setRowSelected] = useState('');
@@ -98,21 +97,18 @@ const AdminUser = () => {
         queryKey: ['user'],
         queryFn: getAllUsers,
     });
+
     const { isLoading: isLoadingUsers, data: users } = queryUser;
 
     // Thống kê
     const totalUsers = useMemo(() => users?.data?.length || 0, [users]);
     const adminUsers = useMemo(() =>
-        users?.data?.filter(user => user.isAdmin).length || 0,
+        users?.data?.filter(user => user?.isAdmin).length || 0,
         [users]
     );
     const regularUsers = useMemo(() =>
-        users?.data?.filter(user => !user.isAdmin).length || 0,
+        users?.data?.filter(user => !user?.isAdmin).length || 0,
         [users]
-    );
-    const activeUsers = useMemo(() =>
-        users?.data?.filter(user => user.isActive !== false).length || totalUsers,
-        [users, totalUsers]
     );
 
     // Biểu đồ phân bố Admin/User
@@ -121,11 +117,11 @@ const AdminUser = () => {
         { name: 'Người dùng thường', count: regularUsers }
     ], [adminUsers, regularUsers]);
 
-    // Biểu đồ trạng thái (giả lập)
-    const statusChartData = useMemo(() => [
-        { name: 'Hoạt động', count: activeUsers },
-        { name: 'Không hoạt động', count: totalUsers - activeUsers }
-    ], [activeUsers, totalUsers]);
+    // Hàm kiểm tra user đã mua hàng chưa - ĐÃ LOẠI BỎ
+    // const hasUserPurchased = (userId) => {
+    //     // Đã loại bỏ
+    //     return false;
+    // };
 
     // Hàm truyền xuống TableComponent để cập nhật selectedRowKeys
     const onSelectChange = (newSelectedRowKeys) => {
@@ -153,10 +149,10 @@ const AdminUser = () => {
             const res = await UserService.getDetailsUser(id, user?.access_token);
             if (res?.data) {
                 setStateUserDetails({
-                    name: res.data.name,
-                    email: res.data.email,
-                    phone: res.data.phone,
-                    isAdmin: res.data.isAdmin,
+                    name: res.data.name || '',
+                    email: res.data.email || '',
+                    phone: res.data.phone || '',
+                    isAdmin: res.data.isAdmin || false,
                     avatar: res.data.avatar || '',
                     address: res.data.address || '',
                 });
@@ -174,7 +170,7 @@ const AdminUser = () => {
     };
 
     const renderAction = (record) => (
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
             <EditOutlined
                 style={{ color: 'orange', fontSize: '18px', cursor: 'pointer' }}
                 onClick={() => handleEditUser(record._id)}
@@ -190,12 +186,16 @@ const AdminUser = () => {
     );
 
     const dataTable = users?.data?.length > 0
-        ? users.data.map((item) => ({
-            ...item,
-            key: item._id,
-            isAdmin: item.isAdmin ? 'Có' : 'Không',
-            status: item.isActive !== false ? 'Hoạt động' : 'Không hoạt động'
-        }))
+        ? users.data.map((item) => {
+            return {
+                ...item,
+                key: item._id,
+                name: item.name || 'Không có tên',
+                email: item.email || 'Không có email',
+                phone: item.phone || 'Không có số điện thoại',
+                isAdmin: item.isAdmin ? 'Có' : 'Không',
+            };
+        })
         : [];
 
     const handleSearch = (selectedKeys, confirm, dataIndex) => {
@@ -242,8 +242,11 @@ const AdminUser = () => {
         filterIcon: (filtered) => (
             <SearchOutlined style={{ color: filtered ? '#1677ff' : undefined }} />
         ),
-        onFilter: (value, record) =>
-            record[dataIndex]?.toString().toLowerCase().includes(value.toLowerCase()),
+        onFilter: (value, record) => {
+            const recordValue = record[dataIndex];
+            if (!recordValue) return false;
+            return recordValue.toString().toLowerCase().includes(value.toLowerCase());
+        },
         filterDropdownProps: {
             onOpenChange(open) {
                 if (open) {
@@ -257,19 +260,31 @@ const AdminUser = () => {
         {
             title: 'Tên người dùng',
             dataIndex: 'name',
-            sorter: (a, b) => a.name.localeCompare(b.name),
+            sorter: (a, b) => {
+                const nameA = a.name || '';
+                const nameB = b.name || '';
+                return nameA.localeCompare(nameB);
+            },
             ...getColumnSearchProps('name')
         },
         {
             title: 'Email',
             dataIndex: 'email',
-            sorter: (a, b) => a.email.localeCompare(b.email),
+            sorter: (a, b) => {
+                const emailA = a.email || '';
+                const emailB = b.email || '';
+                return emailA.localeCompare(emailB);
+            },
             ...getColumnSearchProps('email')
         },
         {
             title: 'Số điện thoại',
             dataIndex: 'phone',
-            sorter: (a, b) => a.phone.localeCompare(b.phone),
+            sorter: (a, b) => {
+                const phoneA = a.phone || '';
+                const phoneB = b.phone || '';
+                return phoneA.localeCompare(phoneB);
+            },
             ...getColumnSearchProps('phone')
         },
         {
@@ -282,18 +297,10 @@ const AdminUser = () => {
             onFilter: (value, record) => record.isAdmin === value
         },
         {
-            title: 'Trạng thái',
-            dataIndex: 'status',
-            filters: [
-                { text: 'Hoạt động', value: 'Hoạt động' },
-                { text: 'Không hoạt động', value: 'Không hoạt động' }
-            ],
-            onFilter: (value, record) => record.status === value
-        },
-        {
             title: 'Hành động',
             key: 'action',
-            render: (_, record) => renderAction(record)
+            render: (_, record) => renderAction(record),
+            width: 100
         }
     ];
 
@@ -401,13 +408,9 @@ const AdminUser = () => {
                     <InfoLabel>Người dùng thường</InfoLabel>
                     <InfoNumber>{regularUsers}</InfoNumber>
                 </InfoCard>
-                <InfoCard>
-                    <InfoLabel>Đang hoạt động</InfoLabel>
-                    <InfoNumber>{activeUsers}</InfoNumber>
-                </InfoCard>
             </InfoCardContainer>
 
-            {/* Charts */}
+            {/* Charts - Chỉ giữ lại biểu đồ phân bố người dùng */}
             <ChartContainer>
                 <ChartCard>
                     <ChartTitle>Phân bố người dùng</ChartTitle>
@@ -430,31 +433,9 @@ const AdminUser = () => {
                         <Legend verticalAlign="bottom" height={36} />
                     </PieChart>
                 </ChartCard>
-
-                <ChartCard>
-                    <ChartTitle>Trạng thái người dùng</ChartTitle>
-                    <PieChart width={350} height={300}>
-                        <Pie
-                            dataKey="count"
-                            data={statusChartData}
-                            cx="50%"
-                            cy="50%"
-                            outerRadius={100}
-                            fill="#82ca9d"
-                            label={({ name, count }) => `${name}: ${count}`}
-                            isAnimationActive
-                        >
-                            {statusChartData.map((entry, index) => (
-                                <Cell key={`cell-status-${index}`} fill={COLORS_STATUS[index % COLORS_STATUS.length]} />
-                            ))}
-                        </Pie>
-                        <Tooltip />
-                        <Legend verticalAlign="bottom" height={36} />
-                    </PieChart>
-                </ChartCard>
             </ChartContainer>
 
-            {/* Bảng người dùng */}
+            {/* Table */}
             <TableWrapper>
                 {dataTable.length ? (
                     <TableComponent
@@ -470,56 +451,83 @@ const AdminUser = () => {
                 )}
             </TableWrapper>
 
-            {/* Drawer update user */}
+            {/* Drawer */}
             <DrawerComponent
                 title="Chi tiết người dùng"
                 isOpen={isOpenDrawer}
                 onClose={handleCloseDrawer}
-                width="50%"
+                width="500px"
             >
                 <Loading isLoading={isLoadingUpdate || isLoadingUpdated}>
                     <Form
-                        name="update-user"
-                        labelCol={{ span: 4 }}
-                        wrapperCol={{ span: 20 }}
-                        onFinish={onUpdateUser}
-                        autoComplete="off"
                         form={formUpdate}
+                        layout="vertical"
+                        onFinish={onUpdateUser}
                     >
-                        <Form.Item label="Tên" name="name" rules={[{ required: true, message: 'Nhập tên!' }]}>
-                            <InputComponent value={stateUserDetails.name} onChange={handleOnchangeDetails} name="name" />
+                        <Form.Item label="Tên người dùng" name="name" rules={[{ required: true, message: 'Nhập tên!' }]}>
+                            <InputComponent
+                                value={stateUserDetails.name}
+                                onChange={handleOnchangeDetails}
+                                name="name"
+                            />
                         </Form.Item>
                         <Form.Item label="Email" name="email" rules={[{ required: true, message: 'Nhập Email!' }]}>
-                            <InputComponent value={stateUserDetails.email} onChange={handleOnchangeDetails} name="email" />
+                            <InputComponent
+                                value={stateUserDetails.email}
+                                onChange={handleOnchangeDetails}
+                                name="email"
+                            />
                         </Form.Item>
                         <Form.Item label="Số điện thoại" name="phone" rules={[{ required: true, message: 'Nhập số điện thoại!' }]}>
-                            <InputComponent value={stateUserDetails.phone} onChange={handleOnchangeDetails} name="phone" />
+                            <InputComponent
+                                value={stateUserDetails.phone}
+                                onChange={handleOnchangeDetails}
+                                name="phone"
+                            />
                         </Form.Item>
                         <Form.Item label="Địa chỉ" name="address">
-                            <InputComponent value={stateUserDetails.address} onChange={handleOnchangeDetails} name="address" />
+                            <InputComponent
+                                value={stateUserDetails.address}
+                                onChange={handleOnchangeDetails}
+                                name="address"
+                            />
                         </Form.Item>
                         <Form.Item label="Quyền admin" name="isAdmin">
-                            <Select value={stateUserDetails.isAdmin ? 'true' : 'false'} onChange={handleSelectChange}>
+                            <Select
+                                value={stateUserDetails.isAdmin ? 'true' : 'false'}
+                                onChange={handleSelectChange}
+                            >
                                 <Select.Option value="true">Có</Select.Option>
                                 <Select.Option value="false">Không</Select.Option>
                             </Select>
                         </Form.Item>
                         <Form.Item label="Ảnh đại diện" name="avatar">
-                            <WrapperUploadFile onChange={handleOnchangeAvatarDetails} maxCount={1} showUploadList={false} beforeUpload={() => false}>
+                            <WrapperUploadFile
+                                onChange={handleOnchangeAvatarDetails}
+                                maxCount={1}
+                                showUploadList={false}
+                                beforeUpload={() => false}
+                            >
                                 <Button>Chọn ảnh</Button>
                                 {stateUserDetails?.avatar && (
-                                    <img src={stateUserDetails?.avatar} style={{
-                                        height: '60px',
-                                        width: '60px',
-                                        borderRadius: '50%',
-                                        objectFit: 'cover',
-                                        marginLeft: '10px'
-                                    }} alt="avatar" />
+                                    <img
+                                        src={stateUserDetails?.avatar}
+                                        style={{
+                                            height: '60px',
+                                            width: '60px',
+                                            borderRadius: '50%',
+                                            objectFit: 'cover',
+                                            marginLeft: '10px'
+                                        }}
+                                        alt="avatar"
+                                    />
                                 )}
                             </WrapperUploadFile>
                         </Form.Item>
-                        <Form.Item wrapperCol={{ offset: 20, span: 16 }}>
-                            <Button type="primary" htmlType="submit">Cập nhật</Button>
+                        <Form.Item>
+                            <Button type="primary" htmlType="submit">
+                                Cập nhật
+                            </Button>
                         </Form.Item>
                     </Form>
                 </Loading>
@@ -533,10 +541,12 @@ const AdminUser = () => {
                 onOk={handleDeleteUser}
                 okText="Xóa"
                 cancelText="Hủy"
+                okButtonProps={{ danger: true, loading: isLoadingDeleted }}
             >
                 <Loading isLoading={isLoadingDeleted}>
                     <div style={{ textAlign: 'center', fontSize: '16px', padding: '20px 0' }}>
-                        Bạn có chắc chắn muốn xóa người dùng này không?
+                        <p>Bạn có chắc chắn muốn xóa người dùng này không?</p>
+                        <p style={{ color: '#ff4d4f', fontWeight: '500' }}>Hành động này không thể hoàn tác!</p>
                     </div>
                 </Loading>
             </ModalComponent>
