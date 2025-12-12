@@ -117,12 +117,6 @@ const AdminUser = () => {
         { name: 'Người dùng thường', count: regularUsers }
     ], [adminUsers, regularUsers]);
 
-    // Hàm kiểm tra user đã mua hàng chưa - ĐÃ LOẠI BỎ
-    // const hasUserPurchased = (userId) => {
-    //     // Đã loại bỏ
-    //     return false;
-    // };
-
     // Hàm truyền xuống TableComponent để cập nhật selectedRowKeys
     const onSelectChange = (newSelectedRowKeys) => {
         setSelectedRowKeys(newSelectedRowKeys);
@@ -304,18 +298,24 @@ const AdminUser = () => {
         }
     ];
 
-    // trạng thái update user
+    // trạng thái update user - SỬA LẠI PHẦN NÀY
     useEffect(() => {
         if (isSuccessUpdated && dataUpdated?.status === 'OK') {
             message.success('Cập nhật người dùng thành công!');
+
+            // Chỉ cập nhật state của component, không dispatch nếu không phải user hiện tại
             if (dataUpdated?.data) {
                 setStateUserDetails(dataUpdated.data);
                 formUpdate.setFieldsValue(dataUpdated.data);
-                dispatch(updateUser({
-                    ...dataUpdated.data,
-                    id: dataUpdated.data._id,
-                    access_token: user?.access_token
-                }));
+
+                // CHỈ dispatch nếu đang cập nhật chính user đang đăng nhập
+                if (dataUpdated.data._id === user?.id) {
+                    dispatch(updateUser({
+                        ...dataUpdated.data,
+                        id: dataUpdated.data._id,
+                        access_token: user?.access_token
+                    }));
+                }
             }
             queryUser.refetch();
             handleCloseDrawer();
@@ -410,7 +410,7 @@ const AdminUser = () => {
                 </InfoCard>
             </InfoCardContainer>
 
-            {/* Charts - Chỉ giữ lại biểu đồ phân bố người dùng */}
+            {/* Charts */}
             <ChartContainer>
                 <ChartCard>
                     <ChartTitle>Phân bố người dùng</ChartTitle>
