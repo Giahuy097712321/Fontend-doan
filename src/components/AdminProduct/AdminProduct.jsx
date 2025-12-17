@@ -84,13 +84,19 @@ const AdminProduct = () => {
   });
 
   // HÀM KIỂM TRA SẢN PHẨM CÓ TRONG ĐƠN HÀNG CHƯA GIAO
+  // HÀM KIỂM TRA SẢN PHẨM CÓ TRONG ĐƠN HÀNG CHƯA GIAO
   const checkProductsInPendingOrders = async (productIds) => {
     try {
       const res = await OrderService.getAllOrder(user?.access_token);
+
+      // Phân loại đơn hàng
       const pendingOrders = res?.data?.filter(order => !order.isDelivered) || [];
+      const deliveredOrders = res?.data?.filter(order => order.isDelivered) || [];
 
       const productsInPendingOrders = [];
+      const productsInDeliveredOrders = [];
 
+      // Kiểm tra đơn hàng CHƯA GIAO (QUAN TRỌNG)
       pendingOrders.forEach(order => {
         order.orderItems?.forEach(item => {
           if (productIds.includes(item.product)) {
@@ -98,16 +104,35 @@ const AdminProduct = () => {
               productId: item.product,
               productName: item.name,
               orderId: order._id,
-              customerName: order.shippingAddress?.fullName || 'Khách hàng'
+              customerName: order.shippingAddress?.fullName || 'Khách hàng',
+              status: 'Chưa giao'
             });
           }
         });
       });
 
-      return productsInPendingOrders;
+      // Kiểm tra đơn hàng ĐÃ GIAO (chỉ để thông tin thêm)
+      deliveredOrders.forEach(order => {
+        order.orderItems?.forEach(item => {
+          if (productIds.includes(item.product)) {
+            productsInDeliveredOrders.push({
+              productId: item.product,
+              productName: item.name,
+              orderId: order._id,
+              customerName: order.shippingAddress?.fullName || 'Khách hàng',
+              status: 'Đã giao'
+            });
+          }
+        });
+      });
+
+      return {
+        pending: productsInPendingOrders,
+        delivered: productsInDeliveredOrders
+      };
     } catch (error) {
       console.error('Lỗi khi kiểm tra đơn hàng:', error);
-      return [];
+      return { pending: [], delivered: [] };
     }
   };
 
@@ -116,51 +141,165 @@ const AdminProduct = () => {
     setIsCheckingOrders(true);
 
     try {
-      const productsInOrders = await checkProductsInPendingOrders(ids);
+      const { pending, delivered } = await checkProductsInPendingOrders(ids);
 
-      if (productsInOrders.length > 0) {
-        // Tạo danh sách sản phẩm không thể xóa
-        const invalidProducts = [...new Set(productsInOrders.map(p => p.productName))];
+      // Lọc ra các sản phẩm CÓ trong đơn hàng CHƯA GIAO
+      const productsWithPendingOrders = [...new Set(pending.map(p => p.productId))];
+
+      // Sản phẩm chỉ có trong đơn hàng ĐÃ GIAO hoặc không có đơn hàng nào
+      const safeToDeleteProducts = ids.filter(id => !productsWithPendingOrders.includes(id));
+
+      // Sản phẩm KHÔNG THỂ xóa (có trong đơn chưa giao)
+      const cannotDeleteProducts = ids.filter(id => productsWithPendingOrders.includes(id));
+
+      if (cannotDeleteProducts.length > 0) {
+        // Lấy tên sản phẩm không thể xóa
+        const cannotDeleteProductNames = [];
+        cannotDeleteProducts.forEach(productId => {
+          const product = products?.data?.find(p => p._id === productId);
+          if (product) cannotDeleteProductNames.push(product.name);
+        });
+
+        // Đếm số đơn hàng đã giao cho mỗi sản phẩm không thể xóa
+        const deliveredCounts = {};
+        cannotDeleteProducts.forEach(productId => {
+          const count = delivered.filter(d => d.productId === productId).length;
+          deliveredCounts[productId] = count;
+        });
 
         Modal.confirm({
           title: 'Không thể xóa sản phẩm',
           icon: <ExclamationCircleOutlined />,
           content: (
             <div>
-              <p>Có {productsInOrders.length} sản phẩm đang trong đơn hàng chưa giao:</p>
-              <ul style={{ maxHeight: '200px', overflowY: 'auto', paddingLeft: '20px' }}>
-                {productsInOrders.slice(0, 5).map((item, index) => (
-                  <li key={index} style={{ marginBottom: '5px' }}>
-                    <strong>{item.productName}</strong> - Đơn hàng: {item.orderId.slice(-6)}
+              <p style={{ color: '#ff4d4f', fontWeight: 'bold', marginBottom: '10px' }}>
+                Có {cannotDeleteProducts.length} sản phẩm KHÔNG THỂ XÓA vì đang trong đơn hàng chưa giao:
+              </p>
+
+              <ul style={{
+                maxHeight: '250px',
+                overflowY: 'auto',
+                paddingLeft: '20px',
+                marginBottom: '15px'
+              }}>
+                {cannotDeleteProducts.slice(0, 10).map((productId, index) => {
+                  const productName = products?.data?.find(p => p._id === productId)?.name || 'Sản phẩm';
+                  const pendingCount = pending.filter(p => p.productId === productId).length;
+                  const deliveredCount = deliveredCounts[productId] || 0;
+
+                  return (
+                    <li key={index} style={{ marginBottom: '8px' }}>
+                      <strong>{productName}</strong>
+                      <div style={{ marginLeft: '20px', fontSize: '14px' }}>
+                        <div style={{ color: '#ff4d4f' }}>
+                          📦 Có trong <strong>{pendingCount}</strong> đơn hàng <strong>CHƯA GIAO</strong>
+                        </div>
+                        {deliveredCount > 0 && (
+                          <div style={{ color: '#1890ff' }}>
+                            ✓ Có trong <strong>{deliveredCount}</strong> đơn hàng <strong>ĐÃ GIAO</strong>
+                          </div>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+
+                {cannotDeleteProducts.length > 10 && (
+                  <li style={{ color: '#666', fontStyle: 'italic' }}>
+                    ... và {cannotDeleteProducts.length - 10} sản phẩm khác
                   </li>
-                ))}
-                {productsInOrders.length > 5 && (
-                  <li>... và {productsInOrders.length - 5} sản phẩm khác</li>
                 )}
               </ul>
-              <p style={{ color: '#ff4d4f', marginTop: '10px' }}>
-                Chỉ có thể xóa sản phẩm khi đơn hàng đã được giao.
-              </p>
+
+              <div style={{
+                backgroundColor: '#fff7e6',
+                padding: '10px',
+                borderRadius: '4px',
+                border: '1px solid #ffd591'
+              }}>
+                <p style={{ color: '#d46b08', margin: 0 }}>
+                  ⚠️ <strong>Điều kiện xóa:</strong> Sản phẩm chỉ có thể xóa khi KHÔNG CÒN trong bất kỳ đơn hàng nào CHƯA GIAO.
+                </p>
+              </div>
             </div>
           ),
           okText: 'Đã hiểu',
-          cancelButtonProps: { style: { display: 'none' } }
+          cancelText: 'Hủy',
+          cancelButtonProps: { style: { display: safeToDeleteProducts.length === 0 ? 'none' : 'inline-block' } },
+          onOk: () => {
+            // Nếu có sản phẩm an toàn để xóa, hỏi xem có muốn xóa những cái đó không
+            if (safeToDeleteProducts.length > 0) {
+              Modal.confirm({
+                title: 'Xóa các sản phẩm có thể xóa',
+                content: (
+                  <div>
+                    <p>Vẫn còn <strong>{safeToDeleteProducts.length}</strong> sản phẩm có thể xóa (không có trong đơn hàng chưa giao).</p>
+                    <p>Bạn có muốn xóa những sản phẩm này không?</p>
+                  </div>
+                ),
+                okText: 'Xóa',
+                cancelText: 'Không',
+                onOk: () => {
+                  mutationDeletedMany.mutate(
+                    { ids: safeToDeleteProducts, token: user?.access_token },
+                    {
+                      onSettled: () => {
+                        queryProduct.refetch();
+                        setSelectedRowKeys([]);
+                      }
+                    }
+                  );
+                }
+              });
+            }
+          }
         });
 
         setSelectedRowKeys([]);
         return;
       }
 
-      // Nếu không có sản phẩm nào trong đơn hàng chưa giao, tiến hành xóa
-      mutationDeletedMany.mutate(
-        { ids, token: user?.access_token },
-        {
-          onSettled: () => {
-            queryProduct.refetch();
-            setSelectedRowKeys([]);
-          }
+      // Nếu tất cả sản phẩm đều an toàn để xóa (không có trong đơn hàng chưa giao)
+      Modal.confirm({
+        title: `Xóa ${ids.length} sản phẩm`,
+        content: (
+          <div>
+            <p>Bạn có chắc chắn muốn xóa {ids.length} sản phẩm đã chọn?</p>
+
+            {delivered.length > 0 && (
+              <div style={{
+                backgroundColor: '#e6f7ff',
+                padding: '10px',
+                borderRadius: '4px',
+                margin: '10px 0'
+              }}>
+                <p style={{ color: '#1890ff', margin: 0 }}>
+                  📋 Lưu ý: Có {delivered.length} sản phẩm đang trong đơn hàng <strong>ĐÃ GIAO</strong>.
+                  Vẫn có thể xóa vì không còn trong đơn hàng chưa giao.
+                </p>
+              </div>
+            )}
+
+            <p style={{ color: '#faad14', fontWeight: '500' }}>
+              ⚠️ Hành động này không thể hoàn tác!
+            </p>
+          </div>
+        ),
+        okText: 'Xóa',
+        cancelText: 'Hủy',
+        okButtonProps: { danger: true },
+        onOk: () => {
+          mutationDeletedMany.mutate(
+            { ids, token: user?.access_token },
+            {
+              onSettled: () => {
+                queryProduct.refetch();
+                setSelectedRowKeys([]);
+              }
+            }
+          );
         }
-      );
+      });
 
     } catch (error) {
       message.error('Có lỗi xảy ra khi kiểm tra đơn hàng!');
@@ -171,18 +310,109 @@ const AdminProduct = () => {
 
   // XÓA MỘT SẢN PHẨM VỚI KIỂM TRA
   const handleDeleteProduct = async () => {
-    const productsInOrders = await checkProductsInPendingOrders([rowSelected]);
+    const { pending, delivered } = await checkProductsInPendingOrders([rowSelected]);
 
-    if (productsInOrders.length > 0) {
-      message.error(`Không thể xóa sản phẩm này! Đang có trong ${productsInOrders.length} đơn hàng chưa giao.`);
+    const productName = products?.data?.find(p => p._id === rowSelected)?.name || 'sản phẩm này';
+
+    if (pending.length > 0) {
+      Modal.confirm({
+        title: `Không thể xóa "${productName}"`,
+        icon: <ExclamationCircleOutlined />,
+        content: (
+          <div>
+            <p style={{ color: '#ff4d4f', fontWeight: 'bold', marginBottom: '10px' }}>
+              Sản phẩm này đang trong đơn hàng CHƯA GIAO!
+            </p>
+
+            <div style={{ marginBottom: '15px' }}>
+              <div style={{ color: '#ff4d4f', marginBottom: '5px' }}>
+                📦 Có trong <strong>{pending.length}</strong> đơn hàng <strong>CHƯA GIAO</strong>:
+              </div>
+              <ul style={{
+                maxHeight: '150px',
+                overflowY: 'auto',
+                paddingLeft: '20px',
+                fontSize: '14px'
+              }}>
+                {pending.slice(0, 5).map((item, index) => (
+                  <li key={index} style={{ marginBottom: '3px' }}>
+                    Đơn hàng: {item.orderId.slice(-8)} - {item.customerName}
+                  </li>
+                ))}
+                {pending.length > 5 && (
+                  <li>... và {pending.length - 5} đơn hàng khác</li>
+                )}
+              </ul>
+            </div>
+
+            {delivered.length > 0 && (
+              <div style={{ marginBottom: '15px' }}>
+                <div style={{ color: '#1890ff', marginBottom: '5px' }}>
+                  ✓ Có trong <strong>{delivered.length}</strong> đơn hàng <strong>ĐÃ GIAO</strong>
+                </div>
+              </div>
+            )}
+
+            <div style={{
+              backgroundColor: '#fff7e6',
+              padding: '10px',
+              borderRadius: '4px',
+              border: '1px solid #ffd591'
+            }}>
+              <p style={{ color: '#d46b08', margin: 0 }}>
+                ⚠️ <strong>Điều kiện xóa:</strong> Chỉ có thể xóa khi sản phẩm KHÔNG CÒN trong bất kỳ đơn hàng nào CHƯA GIAO.
+              </p>
+            </div>
+          </div>
+        ),
+        okText: 'Đã hiểu',
+        cancelButtonProps: { style: { display: 'none' } }
+      });
+
       handleCancelDelete();
       return;
     }
 
-    mutationDeleted.mutate(
-      { id: rowSelected, token: user?.access_token },
-      { onSettled: () => queryProduct.refetch() }
-    );
+    // Nếu không có trong đơn hàng chưa giao
+    Modal.confirm({
+      title: `Xóa sản phẩm "${productName}"`,
+      icon: <ExclamationCircleOutlined />,
+      content: (
+        <div>
+          <p>Bạn có chắc chắn muốn xóa sản phẩm này?</p>
+
+          {delivered.length > 0 ? (
+            <div style={{
+              backgroundColor: '#e6f7ff',
+              padding: '10px',
+              borderRadius: '4px',
+              margin: '10px 0'
+            }}>
+              <p style={{ color: '#1890ff', margin: 0 }}>
+                📋 Lưu ý: Sản phẩm đang có trong <strong>{delivered.length}</strong> đơn hàng <strong>ĐÃ GIAO</strong>.
+                Vẫn có thể xóa vì không còn trong đơn hàng chưa giao.
+              </p>
+            </div>
+          ) : (
+            <p>Sản phẩm không có trong bất kỳ đơn hàng nào.</p>
+          )}
+
+          <p style={{ color: '#faad14', fontWeight: '500' }}>
+            ⚠️ Hành động này không thể hoàn tác!
+          </p>
+        </div>
+      ),
+      okText: 'Xóa',
+      cancelText: 'Hủy',
+      okButtonProps: { danger: true },
+      onOk: () => {
+        mutationDeleted.mutate(
+          { id: rowSelected, token: user?.access_token },
+          { onSettled: () => queryProduct.refetch() }
+        );
+      },
+      onCancel: handleCancelDelete
+    });
   };
 
   const fetchAllTypeProduct = async () => {
