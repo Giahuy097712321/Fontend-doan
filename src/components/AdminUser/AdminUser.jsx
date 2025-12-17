@@ -1,6 +1,6 @@
 // AdminUser.jsx
-import { Button, Form, Select, Input, Empty } from 'antd';
-import { DeleteOutlined, EditOutlined, SearchOutlined } from '@ant-design/icons';
+import { Button, Form, Select, Input, Empty, Modal } from 'antd';
+import { DeleteOutlined, EditOutlined, SearchOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
     WrapperHeader,
@@ -111,6 +111,17 @@ const AdminUser = () => {
         [users]
     );
 
+    // ✅ Hàm kiểm tra có phải user đang đăng nhập không
+    const isCurrentUser = (userId) => {
+        return userId === user?.id || userId === user?.data?._id;
+    };
+
+    // ✅ Hàm kiểm tra có phải là admin không
+    const isAdminUser = (userId) => {
+        const userData = users?.data?.find(u => u._id === userId);
+        return userData?.isAdmin === true;
+    };
+
     // Biểu đồ phân bố Admin/User
     const adminChartData = useMemo(() => [
         { name: 'Quản trị viên', count: adminUsers },
@@ -119,11 +130,32 @@ const AdminUser = () => {
 
     // Hàm truyền xuống TableComponent để cập nhật selectedRowKeys
     const onSelectChange = (newSelectedRowKeys) => {
-        setSelectedRowKeys(newSelectedRowKeys);
+        // ✅ Loại bỏ ID của user đang đăng nhập VÀ admin khỏi danh sách chọn
+        const filteredKeys = newSelectedRowKeys.filter(key => {
+            const isCurrent = isCurrentUser(key);
+            const isAdmin = isAdminUser(key);
+            return !isCurrent && !isAdmin; // Không cho chọn chính mình và admin khác
+        });
+        setSelectedRowKeys(filteredKeys);
     };
 
     // Hàm xóa nhiều user
     const handleDeleteManyUsers = (ids) => {
+        // ✅ Kiểm tra xem có user đang đăng nhập trong danh sách không
+        const containsCurrentUser = ids.some(id => isCurrentUser(id));
+        // ✅ Kiểm tra xem có admin trong danh sách không
+        const containsAdmin = ids.some(id => isAdminUser(id));
+
+        if (containsCurrentUser) {
+            message.error('Không thể xóa tài khoản đang đăng nhập!');
+            return;
+        }
+
+        if (containsAdmin) {
+            message.error('Không thể xóa tài khoản quản trị viên!');
+            return;
+        }
+
         mutationDeletedMany.mutate(
             { ids, token: user?.access_token },
             {
@@ -163,28 +195,70 @@ const AdminUser = () => {
         }
     };
 
-    const renderAction = (record) => (
-        <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-            <EditOutlined
-                style={{ color: 'orange', fontSize: '18px', cursor: 'pointer' }}
-                onClick={() => handleEditUser(record._id)}
-            />
-            <DeleteOutlined
-                style={{ color: 'red', fontSize: '18px', cursor: 'pointer' }}
-                onClick={() => {
-                    setIsModalOpenDelete(true);
-                    setRowSelected(record._id);
-                }}
-            />
-        </div>
-    );
+    const renderAction = (record) => {
+        const userId = record._id;
+        const isSelf = isCurrentUser(userId);
+        const isAdmin = record.isAdmin === 'Có' || record.isAdmin === true;
+
+        return (
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                <EditOutlined
+                    style={{
+                        color: 'orange',
+                        fontSize: '18px',
+                        cursor: 'pointer'
+                    }}
+                    onClick={() => handleEditUser(userId)}
+                    title="Chỉnh sửa người dùng"
+                />
+                {!isSelf && !isAdmin && ( // ✅ CHỈ hiển thị nút xóa nếu KHÔNG phải là mình và KHÔNG phải admin
+                    <DeleteOutlined
+                        style={{ color: 'red', fontSize: '18px', cursor: 'pointer' }}
+                        onClick={() => {
+                            setIsModalOpenDelete(true);
+                            setRowSelected(userId);
+                        }}
+                        title="Xóa người dùng"
+                    />
+                )}
+                {isSelf && (
+                    <span style={{
+                        fontSize: '12px',
+                        color: '#1890ff',
+                        cursor: 'default'
+                    }}>
+                        (Bạn)
+                    </span>
+                )}
+                {isAdmin && !isSelf && (
+                    <span style={{
+                        fontSize: '12px',
+                        color: '#52c41a',
+                        cursor: 'default'
+                    }}>
+                        (Admin)
+                    </span>
+                )}
+            </div>
+        );
+    };
 
     const dataTable = users?.data?.length > 0
         ? users.data.map((item) => {
+            const isSelf = isCurrentUser(item._id);
+            const isAdmin = item.isAdmin === true;
+            let nameDisplay = item.name || 'Không có tên';
+
+            if (isSelf) {
+                nameDisplay += ' (Bạn)';
+            } else if (isAdmin) {
+                nameDisplay += ' (Admin)';
+            }
+
             return {
                 ...item,
                 key: item._id,
-                name: item.name || 'Không có tên',
+                name: nameDisplay,
                 email: item.email || 'Không có email',
                 phone: item.phone || 'Không có số điện thoại',
                 isAdmin: item.isAdmin ? 'Có' : 'Không',
@@ -294,22 +368,21 @@ const AdminUser = () => {
             title: 'Hành động',
             key: 'action',
             render: (_, record) => renderAction(record),
-            width: 100
+            width: 140
         }
     ];
 
-    // trạng thái update user - SỬA LẠI PHẦN NÀY
+    // trạng thái update user
     useEffect(() => {
         if (isSuccessUpdated && dataUpdated?.status === 'OK') {
             message.success('Cập nhật người dùng thành công!');
 
-            // Chỉ cập nhật state của component, không dispatch nếu không phải user hiện tại
             if (dataUpdated?.data) {
                 setStateUserDetails(dataUpdated.data);
                 formUpdate.setFieldsValue(dataUpdated.data);
 
                 // CHỈ dispatch nếu đang cập nhật chính user đang đăng nhập
-                if (dataUpdated.data._id === user?.id) {
+                if (isCurrentUser(dataUpdated.data._id)) {
                     dispatch(updateUser({
                         ...dataUpdated.data,
                         id: dataUpdated.data._id,
@@ -338,6 +411,23 @@ const AdminUser = () => {
     const handleCancelDelete = () => setIsModalOpenDelete(false);
 
     const handleDeleteUser = () => {
+        const isSelf = isCurrentUser(rowSelected);
+        const isAdmin = isAdminUser(rowSelected);
+
+        // ✅ Kiểm tra nếu đang xóa chính mình
+        if (isSelf) {
+            message.error('Không thể xóa tài khoản đang đăng nhập!');
+            handleCancelDelete();
+            return;
+        }
+
+        // ✅ Kiểm tra nếu đang xóa admin
+        if (isAdmin) {
+            message.error('Không thể xóa tài khoản quản trị viên!');
+            handleCancelDelete();
+            return;
+        }
+
         mutationDeleted.mutate(
             { id: rowSelected, token: user?.access_token },
             { onSettled: () => queryUser.refetch() }
@@ -347,6 +437,7 @@ const AdminUser = () => {
     const handleCloseDrawer = () => {
         setIsOpenDrawer(false);
         formUpdate.resetFields();
+        setRowSelected('');
     };
 
     const onUpdateUser = () => {
@@ -545,8 +636,30 @@ const AdminUser = () => {
             >
                 <Loading isLoading={isLoadingDeleted}>
                     <div style={{ textAlign: 'center', fontSize: '16px', padding: '20px 0' }}>
-                        <p>Bạn có chắc chắn muốn xóa người dùng này không?</p>
-                        <p style={{ color: '#ff4d4f', fontWeight: '500' }}>Hành động này không thể hoàn tác!</p>
+                        {isCurrentUser(rowSelected) ? (
+                            <>
+                                <p style={{ color: '#ff4d4f', fontWeight: 'bold', marginBottom: '15px' }}>
+                                    ⚠️ KHÔNG THỂ XÓA TÀI KHOẢN ĐANG ĐĂNG NHẬP!
+                                </p>
+                                <p>• Bạn không thể xóa tài khoản của chính mình</p>
+                                <p>• Hãy đăng xuất hoặc dùng tài khoản admin khác để xóa</p>
+                            </>
+                        ) : isAdminUser(rowSelected) ? (
+                            <>
+                                <p style={{ color: '#ff4d4f', fontWeight: 'bold', marginBottom: '15px' }}>
+                                    ⚠️ KHÔNG THỂ XÓA TÀI KHOẢN QUẢN TRỊ VIÊN!
+                                </p>
+                                <p>• Bạn không thể xóa tài khoản quản trị viên</p>
+                                <p>• Chỉ có thể xóa người dùng thường</p>
+                            </>
+                        ) : (
+                            <>
+                                <p>Bạn có chắc chắn muốn xóa người dùng này không?</p>
+                                <p style={{ color: '#ff4d4f', fontWeight: '500', marginTop: '10px' }}>
+                                    ⚠️ Cảnh báo: Tất cả đơn hàng của người dùng này cũng sẽ bị xóa!
+                                </p>
+                            </>
+                        )}
                     </div>
                 </Loading>
             </ModalComponent>

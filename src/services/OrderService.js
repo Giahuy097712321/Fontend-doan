@@ -35,7 +35,14 @@ export const cancelOrder = async (id, access_token, orderItems) => {
     );
     return res.data;
 };
-
+export const reorder = async (id, access_token) => {
+    const res = await axiosJWT.post(
+        `${process.env.REACT_APP_API_URL}/order/reorder/${id}`,
+        {},
+        { headers: { token: `Bearer ${access_token}` } }
+    );
+    return res.data;
+};
 // 💳 Thanh toán đơn hàng
 export const payOrder = async (id, access_token) => {
     const res = await axiosJWT.post(

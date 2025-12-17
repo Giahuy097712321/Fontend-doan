@@ -1,7 +1,6 @@
-// src/pages/PaymentPage/PaymentPage.jsx
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Form, message, Grid } from 'antd';
+import { Form, message, Grid, Modal, Button } from 'antd';
 import { useSelector, useDispatch } from 'react-redux';
 import { removeAllOrderProduct } from '../../redux/sildes/orderSlide';
 import { updateUser } from '../../redux/sildes/userSlide';
@@ -51,8 +50,19 @@ const PaymentPage = () => {
   const orderItems = passedOrders.length ? passedOrders : order.orderItemsSelected;
 
   const [isOpenModalUpdateInfo, setIsOpenModalUpdateInfo] = useState(false);
-  const [stateUserDetails, setStateUserDetails] = useState({ name: '', phone: '', address: '', city: '' });
-  const [payment, setPayment] = useState('Thanh toán tiền mặt khi nhận hàng');
+  const [stateUserDetails, setStateUserDetails] = useState({
+    name: '',
+    phone: '',
+    address: '',
+    city: ''
+  });
+
+  // Address selection state
+  const [showAddressSelector, setShowAddressSelector] = useState(false);
+  const [addresses, setAddresses] = useState([]);
+  const [selectedAddress, setSelectedAddress] = useState(null);
+
+  const [paymentMethod, setPaymentMethod] = useState('COD'); // Mặc định là COD
   const [delivery, setDelivery] = useState('FAST');
   const [clientSecret, setClientSecret] = useState(null);
   const [isStripeReady, setIsStripeReady] = useState(false);
@@ -62,29 +72,68 @@ const PaymentPage = () => {
   const [isValidOrder, setIsValidOrder] = useState(true);
   const [stripeKey, setStripeKey] = useState(0);
 
-  const mutationUpdate = useMutationHooks(async ({ id, token, ...userData }) => UserService.updateUser(id, userData, token));
+  const mutationUpdate = useMutationHooks(async ({ id, token, ...userData }) =>
+    UserService.updateUser(id, userData, token)
+  );
+
   const mutationAddOrder = useMutationHooks((data) => {
     const { token, ...rest } = data;
     return OrderService.createOrder(rest, token);
   });
 
   const { isLoading } = mutationUpdate;
-  const { isLoading: isLoadingAddOrder, isSuccess, isError, data: newOrder } = mutationAddOrder;
+  const {
+    isLoading: isLoadingAddOrder,
+    isSuccess,
+    isError,
+    data: newOrder
+  } = mutationAddOrder;
 
-  // 🔥 RESET HOÀN TOÀN STRIPE VÀ TRẠNG THÁI KHI CHUYỂN SANG COD
+  // Reset Stripe khi chuyển sang COD
   const resetStripeAndState = useCallback(() => {
     setClientSecret(null);
     setIsStripeReady(false);
-    setIsPlacingOrder(false); // 🔥 QUAN TRỌNG: Reset trạng thái loading
+    setIsPlacingOrder(false);
     setStripeKey(prev => prev + 1);
   }, []);
 
   // Tự động reset khi chuyển phương thức thanh toán
   useEffect(() => {
-    if (payment !== 'Stripe') {
+    if (paymentMethod !== 'Stripe') {
       resetStripeAndState();
     }
-  }, [payment, resetStripeAndState]);
+  }, [paymentMethod, resetStripeAndState]);
+
+  // Determine default address for user (prefers addresses array default, otherwise fallback to user.address)
+  const defaultAddress = useMemo(() => {
+    const defaultAddr = (user?.addresses || []).find(a => a.isDefault)
+    if (defaultAddr) return defaultAddr
+    if (user?.address || user?.city || user?.phone || user?.name) {
+      return { name: user?.name, phone: user?.phone, address: user?.address, city: user?.city }
+    }
+    return null
+  }, [user])
+
+  // Fetch addresses when opening selector or on mount
+  const fetchAddresses = async () => {
+    if (!user?.id) return
+    try {
+      const res = await UserService.getAddresses(user.id, user.access_token)
+      if (res?.data) setAddresses(res.data)
+    } catch (err) {
+      console.log('❌ Lỗi fetch addresses', err)
+    }
+  }
+
+  // Set selectedAddress from location state or default
+  useEffect(() => {
+    if (location?.state?.address) {
+      setSelectedAddress(location.state.address)
+    } else {
+      const def = (user?.addresses || []).find(a => a.isDefault)
+      if (def) setSelectedAddress(def)
+    }
+  }, [location, user])
 
   // Kiểm tra tính hợp lệ của đơn hàng
   useEffect(() => {
@@ -96,7 +145,10 @@ const PaymentPage = () => {
         return false;
       }
 
-      if (!user?.access_token || !user?.name || !user?.address || !user?.phone || !user?.city || !user?.id) {
+      // require selectedAddress or fallback
+      const currentAddr = selectedAddress || (user && ((user.address && user.city && user.phone && user.name) ? { name: user.name, address: user.address, city: user.city, phone: user.phone } : null))
+
+      if (!user?.access_token || !currentAddr?.name || !currentAddr?.address || !currentAddr?.phone || !currentAddr?.city || !user?.id) {
         message.warning('Vui lòng cập nhật đầy đủ thông tin giao hàng!');
         setIsValidOrder(false);
         return false;
@@ -114,19 +166,20 @@ const PaymentPage = () => {
     };
 
     checkOrderValidity();
-  }, [orderItems, user, hasOrdered, navigate]);
+  }, [orderItems, user, selectedAddress, hasOrdered, navigate]);
 
   // Load user details khi mở modal
   useEffect(() => {
     if (isOpenModalUpdateInfo) {
+      const current = selectedAddress || defaultAddress || user
       setStateUserDetails({
-        name: user?.data?.name || user?.name || '',
-        phone: user?.data?.phone || user?.phone || '',
-        address: user?.data?.address || user?.address || '',
-        city: user?.data?.city || user?.city || '',
+        name: current?.name || user?.data?.name || user?.name || '',
+        phone: current?.phone || user?.data?.phone || user?.phone || '',
+        address: current?.address || user?.data?.address || user?.address || '',
+        city: current?.city || user?.data?.city || user?.city || '',
       });
     }
-  }, [isOpenModalUpdateInfo, user]);
+  }, [isOpenModalUpdateInfo, user, defaultAddress, selectedAddress]);
 
   useEffect(() => {
     if (isOpenModalUpdateInfo) {
@@ -142,7 +195,9 @@ const PaymentPage = () => {
 
   const priceDiscountMemo = useMemo(() => {
     if (!isValidOrder || !orderItems?.length) return 0;
-    return orderItems.reduce((total, cur) => total + (cur.price * cur.amount * (cur.discount || 0)) / 100, 0);
+    return orderItems.reduce((total, cur) =>
+      total + (cur.price * cur.amount * (cur.discount || 0)) / 100, 0
+    );
   }, [orderItems, isValidOrder]);
 
   const deliveryPriceMemo = useMemo(() => {
@@ -152,20 +207,32 @@ const PaymentPage = () => {
     return 20000;
   }, [priceMemo, orderItems, isValidOrder]);
 
-  const totalPriceMemo = useMemo(() => priceMemo - priceDiscountMemo + deliveryPriceMemo, [priceMemo, priceDiscountMemo, deliveryPriceMemo]);
-  const totalDiscountPercent = useMemo(() => (priceMemo === 0 ? 0 : Math.round((priceDiscountMemo / priceMemo) * 100)), [priceDiscountMemo, priceMemo]);
+  const totalPriceMemo = useMemo(() =>
+    priceMemo - priceDiscountMemo + deliveryPriceMemo,
+    [priceMemo, priceDiscountMemo, deliveryPriceMemo]
+  );
+
+  const totalDiscountPercent = useMemo(() =>
+    (priceMemo === 0 ? 0 : Math.round((priceDiscountMemo / priceMemo) * 100)),
+    [priceDiscountMemo, priceMemo]
+  );
 
   // Update thông tin user
   const handleUpdateInfoUser = () => {
     const { name, address, city, phone } = stateUserDetails;
     if (name && address && city && phone) {
       mutationUpdate.mutate(
-        { id: user?.id || user?.data?._id, token: user?.access_token, ...stateUserDetails },
+        {
+          id: user?.id || user?.data?._id,
+          token: user?.access_token,
+          ...stateUserDetails
+        },
         {
           onSuccess: (response) => {
             dispatch(updateUser(response?.data));
             setIsOpenModalUpdateInfo(false);
             setIsValidOrder(true);
+            message.success('Cập nhật thông tin thành công!');
           },
           onError: () => {
             message.error('Cập nhật thông tin thất bại!');
@@ -182,8 +249,8 @@ const PaymentPage = () => {
     setIsOpenModalUpdateInfo(false);
   };
 
-  // 🔥 HÀM XỬ LÝ ORDER THÀNH CÔNG
-  const handleOrderSuccess = useCallback((orderData, paymentMethod = payment) => {
+  // Hàm xử lý order thành công
+  const handleOrderSuccess = useCallback((orderData, paymentMethodUsed) => {
     setHasOrdered(true);
     setIsValidOrder(false);
     setIsPlacingOrder(false);
@@ -192,11 +259,11 @@ const PaymentPage = () => {
     const arrayOrdered = orderItems.map(item => item.product);
     dispatch(removeAllOrderProduct({ listChecked: arrayOrdered }));
 
-    message.success(
-      paymentMethod === 'StripePaid'
-        ? 'Thanh toán thành công!'
-        : 'Đặt hàng thành công!'
-    );
+    // Thông báo thành công
+    const successMessage = paymentMethodUsed === 'Stripe'
+      ? 'Thanh toán thành công!'
+      : 'Đặt hàng thành công!';
+    message.success(successMessage);
 
     // Reset Stripe nếu có
     resetStripeAndState();
@@ -205,67 +272,86 @@ const PaymentPage = () => {
     navigate('/orderSuccess', {
       state: {
         delivery,
-        payment: paymentMethod,
+        payment: paymentMethodUsed,
         orders: orderItems,
         totalPriceMemo,
         orderId: orderData._id || createdOrderId
       },
       replace: true
     });
-  }, [orderItems, dispatch, navigate, delivery, totalPriceMemo, createdOrderId, payment, resetStripeAndState]);
+  }, [orderItems, dispatch, navigate, delivery, totalPriceMemo, createdOrderId, resetStripeAndState]);
 
   // Tạo đơn hàng
-  const handleCreateOrder = async (paymentMethodType = payment) => {
+  const handleCreateOrder = async (paymentMethodType = paymentMethod) => {
     if (!isValidOrder || hasOrdered || !orderItems?.length) {
       throw new Error('Đơn hàng không hợp lệ hoặc đã được xử lý');
     }
 
-    const isPaid = paymentMethodType === 'StripePaid';
+    // Xác định trạng thái thanh toán dựa trên paymentMethod
+    const isPaid = paymentMethodType === 'Stripe';
+
+    const currentAddr = selectedAddress || (user && ((user.address && user.city && user.phone && user.name) ? { name: user.name, phone: user.phone, address: user.address, city: user.city } : null))
+
     const payload = {
       orderItems,
-      fullName: user?.name,
+      fullName: currentAddr?.name || user?.name,
       email: user?.email,
-      phone: user?.phone,
-      paymentMethod: paymentMethodType === 'StripePaid' ? 'Stripe' : paymentMethodType,
+      phone: currentAddr?.phone || user?.phone,
+      paymentMethod: paymentMethodType, // 'COD' hoặc 'Stripe'
       itemsPrice: priceMemo,
       shippingPrice: deliveryPriceMemo,
       totalPrice: totalPriceMemo,
       delivery,
       user: user?.id,
-      address: user?.address,
-      city: user?.city,
+      address: currentAddr?.address || user?.address,
+      city: currentAddr?.city || user?.city,
       country: 'Việt Nam',
       taxPrice: 0,
       discount: totalDiscountPercent || 0,
-      isPaid,
+      isPaid, // Quan trọng: truyền isPaid đúng theo paymentMethod
     };
 
+    console.log('📤 Gửi dữ liệu đơn hàng:', payload);
+
     return new Promise((resolve, reject) => {
-      mutationAddOrder.mutate({ ...payload, token: user?.access_token }, {
-        onSuccess: async (res) => {
-          const orderData = res.data;
-          setCreatedOrderId(orderData._id);
-
-          if (paymentMethodType === 'StripePaid') {
-            try {
-              await OrderService.payOrder(orderData._id, user?.access_token);
-            } catch (payError) {
-              console.error('Lỗi khi cập nhật trạng thái thanh toán:', payError);
-            }
-          }
-
-          resolve(orderData);
+      mutationAddOrder.mutate(
+        {
+          ...payload,
+          token: user?.access_token
         },
-        onError: (error) => {
-          console.error('Lỗi tạo đơn hàng:', error);
-          setIsPlacingOrder(false); // 🔥 Reset loading khi lỗi
-          reject(error);
+        {
+          onSuccess: async (res) => {
+            console.log('✅ Phản hồi từ backend:', res);
+            if (res?.status === 'OK') {
+              const orderData = res.data;
+              setCreatedOrderId(orderData._id);
+
+              // Nếu là Stripe, cập nhật trạng thái thanh toán
+              if (paymentMethodType === 'Stripe') {
+                try {
+                  await OrderService.payOrder(orderData._id, user?.access_token);
+                } catch (payError) {
+                  console.error('Lỗi khi cập nhật trạng thái thanh toán:', payError);
+                }
+              }
+
+              resolve(orderData);
+            } else {
+              reject(new Error(res?.message || 'Lỗi tạo đơn hàng'));
+            }
+          },
+          onError: (error) => {
+            console.error('❌ Lỗi tạo đơn hàng:', error);
+            setIsPlacingOrder(false);
+            reject(error);
+          }
         }
-      });
+      );
     });
   };
 
-  const handleAddOrder = async () => {
+  // Xử lý đặt hàng
+  const handlePlaceOrder = async () => {
     if (!isValidOrder) {
       message.error('Đơn hàng không hợp lệ!');
       return;
@@ -276,48 +362,50 @@ const PaymentPage = () => {
       return;
     }
 
-    if (!user?.access_token || !orderItems?.length || !user?.name || !user?.address || !user?.phone || !user?.city || !user?.id) {
+    // require a chosen address (either selectedAddress or fallback info on user)
+    const currentAddr = selectedAddress || (user && ((user.address && user.city && user.phone && user.name) ? { name: user.name, address: user.address, city: user.city, phone: user.phone } : null))
+
+    if (!user?.access_token || !orderItems?.length || !currentAddr || !user?.id) {
       message.warning('Vui lòng kiểm tra thông tin giao hàng và sản phẩm!');
       return;
     }
 
     setIsPlacingOrder(true);
 
-    // 🔥 XỬ LÝ COD
-    if (payment === 'Thanh toán tiền mặt khi nhận hàng') {
+    // Xử lý COD
+    if (paymentMethod === 'COD') {
       try {
-        const orderData = await handleCreateOrder();
-        handleOrderSuccess(orderData);
+        const orderData = await handleCreateOrder('COD');
+        handleOrderSuccess(orderData, 'COD');
       } catch (err) {
         console.error('Lỗi đặt hàng COD:', err);
-        message.error('Đặt hàng thất bại!');
-        // setIsPlacingOrder(false); // 🔥 Đã được reset trong handleCreateOrder onError
+        message.error('Đặt hàng thất bại: ' + (err.message || 'Lỗi không xác định'));
+        setIsPlacingOrder(false);
       }
     }
-    // 🔥 XỬ LÝ STRIPE
-    else if (payment === 'Stripe') {
+    // Xử lý Stripe
+    else if (paymentMethod === 'Stripe') {
       try {
+        // Tạo Payment Intent
         const res = await PaymentService.createPaymentIntent(totalPriceMemo, user?.access_token);
+
         if (res?.status === 'OK' && res?.clientSecret) {
           setClientSecret(res.clientSecret);
           setIsStripeReady(true);
+          // Giữ nguyên trạng thái loading để chờ Stripe form
         } else {
-          message.error('Không thể tạo payment Stripe!');
+          message.error('Không thể tạo thanh toán Stripe!');
           setIsPlacingOrder(false);
         }
       } catch (err) {
         console.error('Lỗi tạo payment Stripe:', err);
-
-        // 🔥 FALLBACK: Nếu Stripe lỗi, tự động chuyển sang COD
-        message.warning('Stripe đang gặp sự cố. Tự động chuyển sang thanh toán COD!');
-        setPayment('Thanh toán tiền mặt khi nhận hàng');
-        resetStripeAndState();
-        // setIsPlacingOrder(false); // 🔥 Đã được reset trong resetStripeAndState
+        message.error('Stripe đang gặp sự cố. Vui lòng thử lại hoặc chọn phương thức COD!');
+        setIsPlacingOrder(false);
       }
     }
   };
 
-  // 🔥 Xử lý thành công từ Stripe
+  // Xử lý thành công từ Stripe
   const handleStripeSuccess = async () => {
     if (hasOrdered || !isValidOrder) {
       message.warning('Đơn hàng đã được xử lý!');
@@ -326,8 +414,8 @@ const PaymentPage = () => {
 
     try {
       setIsPlacingOrder(true);
-      const orderData = await handleCreateOrder('StripePaid');
-      handleOrderSuccess(orderData, 'StripePaid');
+      const orderData = await handleCreateOrder('Stripe');
+      handleOrderSuccess(orderData, 'Stripe');
     } catch (error) {
       console.error('Lỗi xử lý Stripe success:', error);
       message.error('Có lỗi xảy ra khi xử lý đơn hàng!');
@@ -335,30 +423,76 @@ const PaymentPage = () => {
     }
   };
 
-  // 🔥 Xử lý khi hủy Stripe
+  // Xử lý khi hủy Stripe
   const handleStripeCancel = () => {
     resetStripeAndState();
+    setIsPlacingOrder(false);
     message.info('Đã hủy thanh toán Stripe');
   };
 
-  // Xử lý khi mutation thành công (fallback)
+  // Fallback: Xử lý khi mutation thành công
   useEffect(() => {
     if (isSuccess && newOrder && !hasOrdered && isValidOrder) {
-      handleOrderSuccess(newOrder.data);
+      handleOrderSuccess(newOrder.data, paymentMethod);
     }
-  }, [isSuccess, newOrder, hasOrdered, isValidOrder, handleOrderSuccess]);
+  }, [isSuccess, newOrder, hasOrdered, isValidOrder, handleOrderSuccess, paymentMethod]);
 
   const handleOnchangeDetails = (e) => {
-    setStateUserDetails({ ...stateUserDetails, [e.target.name]: e.target.value });
+    setStateUserDetails({
+      ...stateUserDetails,
+      [e.target.name]: e.target.value
+    });
   };
 
-  // 🔥 XỬ LÝ KHI CHUYỂN ĐỔI PHƯƠNG THỨC THANH TOÁN
+  // Address selector markup
+  const AddressSelectorModal = () => (
+    <Modal
+      title="Chọn địa chỉ giao hàng"
+      visible={showAddressSelector}
+      onCancel={() => setShowAddressSelector(false)}
+      footer={null}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {addresses && addresses.length ? (
+          addresses.map(addr => (
+            <div key={addr._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', border: selectedAddress && selectedAddress._id === addr._id ? '2px solid #1890ff' : '1px solid #f0f0f0', borderRadius: '6px' }}>
+              <div>
+                <div style={{ fontWeight: '600' }}>{addr.name} {addr.isDefault && <span style={{ color: '#1890ff', marginLeft: '8px' }}>(Mặc định)</span>}</div>
+                <div style={{ color: '#666' }}>{addr.phone} • {addr.address}, {addr.city}</div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <Button type="primary" onClick={() => { setSelectedAddress(addr); setShowAddressSelector(false); setStateUserDetails({ name: addr.name, phone: addr.phone, address: addr.address, city: addr.city }); }}>
+                  Chọn
+                </Button>
+                {!addr.isDefault && <Button onClick={async () => { await UserService.setDefaultAddress(user.id, addr._id, user.access_token); await fetchAddresses(); }}>
+                  Đặt mặc định
+                </Button>}
+                <Button onClick={() => { setSelectedAddress(addr); setShowAddressSelector(false); setIsOpenModalUpdateInfo(true); }}>
+                  Sửa
+                </Button>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div>Chưa có địa chỉ nào</div>
+        )}
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+          <Button onClick={() => { setShowAddressSelector(false); setIsOpenModalUpdateInfo(true); fetchAddresses(); }}>
+            Thêm / Sửa địa chỉ
+          </Button>
+          <Button onClick={() => setShowAddressSelector(false)}>Đóng</Button>
+        </div>
+      </div>
+    </Modal>
+  )
+
+  // Xử lý khi chuyển đổi phương thức thanh toán
   const handlePaymentChange = (newPaymentMethod) => {
     // Reset trạng thái Stripe khi chuyển sang COD
     if (newPaymentMethod !== 'Stripe') {
       resetStripeAndState();
     }
-    setPayment(newPaymentMethod);
+    setPaymentMethod(newPaymentMethod);
   };
 
   if (!isValidOrder) {
@@ -407,19 +541,19 @@ const PaymentPage = () => {
               {/* Thông tin giao hàng */}
               <PaymentSection>
                 <h3>🚚 Thông tin giao hàng</h3>
-                <PaymentInfoCard onClick={() => setIsOpenModalUpdateInfo(true)}>
+                <PaymentInfoCard onClick={() => { setShowAddressSelector(true); fetchAddresses() }}>
                   <div className="info-header">
                     <span className="title">Địa chỉ nhận hàng</span>
                     <span className="change-btn">Thay đổi</span>
                   </div>
                   <div className="info-content">
                     <div className="info-item">
-                      <strong>{user?.name || 'Chưa có thông tin'}</strong>
+                      <strong>{(selectedAddress || defaultAddress)?.name || 'Chưa có thông tin'}</strong>
                       <span>|</span>
-                      <span>{user?.phone || 'Chưa có số điện thoại'}</span>
+                      <span>{(selectedAddress || defaultAddress)?.phone || 'Chưa có số điện thoại'}</span>
                     </div>
                     <div className="info-item">
-                      {user?.address && user?.city ? `${user.address}, ${user.city}` : 'Chưa có địa chỉ'}
+                      {(selectedAddress || defaultAddress)?.address && (selectedAddress || defaultAddress)?.city ? `${(selectedAddress || defaultAddress).address}, ${(selectedAddress || defaultAddress).city}` : 'Chưa có địa chỉ'}
                     </div>
                   </div>
                 </PaymentInfoCard>
@@ -456,8 +590,8 @@ const PaymentPage = () => {
                 <h3>💳 Phương thức thanh toán</h3>
                 <div className="options-grid">
                   <PaymentOption
-                    selected={payment === 'Thanh toán tiền mặt khi nhận hàng'}
-                    onClick={() => handlePaymentChange('Thanh toán tiền mặt khi nhận hàng')}
+                    selected={paymentMethod === 'COD'}
+                    onClick={() => handlePaymentChange('COD')}
                   >
                     <div className="option-content">
                       <div className="option-title">Thanh toán khi nhận hàng (COD)</div>
@@ -466,7 +600,7 @@ const PaymentPage = () => {
                   </PaymentOption>
 
                   <PaymentOption
-                    selected={payment === 'Stripe'}
+                    selected={paymentMethod === 'Stripe'}
                     onClick={() => handlePaymentChange('Stripe')}
                   >
                     <div className="option-content">
@@ -477,7 +611,7 @@ const PaymentPage = () => {
                 </div>
 
                 {/* Stripe Form */}
-                {payment === 'Stripe' && isStripeReady && clientSecret && (
+                {paymentMethod === 'Stripe' && isStripeReady && clientSecret && (
                   <div style={{ marginTop: '20px' }}>
                     <Elements
                       key={stripeKey}
@@ -553,12 +687,14 @@ const PaymentPage = () => {
 
                 <div className="tax-note">(Đã bao gồm VAT nếu có)</div>
 
-                <Loading isLoading={isPlacingOrder}>
+                <Loading isLoading={isPlacingOrder && !isStripeReady}>
                   <ButtonComponent
-                    onClick={handleAddOrder}
+                    onClick={handlePlaceOrder}
                     size={40}
                     styleButton={{
-                      background: hasOrdered || (payment === 'Stripe' && isStripeReady) ? '#ccc' : 'linear-gradient(135deg, #1890ff 0%, #096dd9 100%)',
+                      background: hasOrdered || (paymentMethod === 'Stripe' && isStripeReady)
+                        ? '#ccc'
+                        : 'linear-gradient(135deg, #1890ff 0%, #096dd9 100%)',
                       height: '52px',
                       width: '100%',
                       border: 'none',
@@ -566,15 +702,21 @@ const PaymentPage = () => {
                       marginTop: '20px',
                       fontSize: '16px',
                       fontWeight: '600',
-                      cursor: hasOrdered || (payment === 'Stripe' && isStripeReady) ? 'not-allowed' : 'pointer'
+                      cursor: hasOrdered || (paymentMethod === 'Stripe' && isStripeReady)
+                        ? 'not-allowed'
+                        : 'pointer'
                     }}
                     textButton={
-                      hasOrdered ? 'ĐANG XỬ LÝ...' :
-                        (payment === 'Stripe' && isStripeReady) ? 'ĐANG CHỜ THANH TOÁN...' :
-                          'ĐẶT HÀNG NGAY'
+                      hasOrdered
+                        ? 'ĐANG XỬ LÝ...'
+                        : (paymentMethod === 'Stripe' && isStripeReady)
+                          ? 'ĐANG CHỜ THANH TOÁN...'
+                          : paymentMethod === 'COD'
+                            ? 'ĐẶT HÀNG NGAY'
+                            : 'THANH TOÁN NGAY'
                     }
                     styleTextButton={{ color: '#fff', fontSize: '16px', fontWeight: '600' }}
-                    disabled={isPlacingOrder || hasOrdered || (payment === 'Stripe' && isStripeReady)}
+                    disabled={hasOrdered || (paymentMethod === 'Stripe' && isStripeReady)}
                   />
                 </Loading>
 
@@ -586,6 +728,9 @@ const PaymentPage = () => {
           </PaymentContent>
         </PaymentWrapper>
       </Loading>
+
+      {/* Address selector modal */}
+      <AddressSelectorModal />
 
       {/* Modal cập nhật thông tin */}
       <ModalComponent

@@ -1,6 +1,6 @@
 // AdminProduct.jsx
-import { Button, Form, Select, Input, Row, Col, Card, Statistic, Empty } from 'antd';
-import { PlusOutlined, DeleteOutlined, EditOutlined, SearchOutlined, ShoppingOutlined, StarOutlined, StockOutlined, AppstoreOutlined } from '@ant-design/icons';
+import { Button, Form, Select, Input, Row, Col, Card, Statistic, Empty, Modal } from 'antd';
+import { PlusOutlined, DeleteOutlined, EditOutlined, SearchOutlined, ShoppingOutlined, StarOutlined, StockOutlined, AppstoreOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   WrapperHeader,
@@ -20,6 +20,7 @@ import TableComponent from '../TableComponent/TableComponent';
 import InputComponent from './../InputComponent/InputComponent';
 import { getBase64 } from '../../utils';
 import * as ProductService from '../../services/ProductService';
+import * as OrderService from '../../services/OrderService'; // THÊM IMPORT NÀY
 import { useMutationHooks } from './../../hooks/useMutationHook';
 import Loading from './../LoadingComponent/Loading';
 import * as message from '../../components/Message/Message';
@@ -41,6 +42,8 @@ const AdminProduct = () => {
   const [isLoadingUpdate, setIsLoadingUpdate] = useState(false);
   const [isOpenDrawer, setIsOpenDrawer] = useState(false);
   const [isModalOpenDelete, setIsModalOpenDelete] = useState(false);
+  const [selectedRowKeys, setSelectedRowKeys] = useState([]);
+  const [isCheckingOrders, setIsCheckingOrders] = useState(false);
 
   const [formCreate] = Form.useForm();
   const [formUpdate] = Form.useForm();
@@ -80,9 +83,104 @@ const AdminProduct = () => {
     return ProductService.deleteManyProduct(ids, token);
   });
 
-  const handleDeleteManyProducts = (ids) => {
-    mutationDeletedMany.mutate(
-      { ids, token: user?.access_token },
+  // HÀM KIỂM TRA SẢN PHẨM CÓ TRONG ĐƠN HÀNG CHƯA GIAO
+  const checkProductsInPendingOrders = async (productIds) => {
+    try {
+      const res = await OrderService.getAllOrder(user?.access_token);
+      const pendingOrders = res?.data?.filter(order => !order.isDelivered) || [];
+
+      const productsInPendingOrders = [];
+
+      pendingOrders.forEach(order => {
+        order.orderItems?.forEach(item => {
+          if (productIds.includes(item.product)) {
+            productsInPendingOrders.push({
+              productId: item.product,
+              productName: item.name,
+              orderId: order._id,
+              customerName: order.shippingAddress?.fullName || 'Khách hàng'
+            });
+          }
+        });
+      });
+
+      return productsInPendingOrders;
+    } catch (error) {
+      console.error('Lỗi khi kiểm tra đơn hàng:', error);
+      return [];
+    }
+  };
+
+  // XÓA NHIỀU SẢN PHẨM VỚI KIỂM TRA
+  const handleDeleteManyProducts = async (ids) => {
+    setIsCheckingOrders(true);
+
+    try {
+      const productsInOrders = await checkProductsInPendingOrders(ids);
+
+      if (productsInOrders.length > 0) {
+        // Tạo danh sách sản phẩm không thể xóa
+        const invalidProducts = [...new Set(productsInOrders.map(p => p.productName))];
+
+        Modal.confirm({
+          title: 'Không thể xóa sản phẩm',
+          icon: <ExclamationCircleOutlined />,
+          content: (
+            <div>
+              <p>Có {productsInOrders.length} sản phẩm đang trong đơn hàng chưa giao:</p>
+              <ul style={{ maxHeight: '200px', overflowY: 'auto', paddingLeft: '20px' }}>
+                {productsInOrders.slice(0, 5).map((item, index) => (
+                  <li key={index} style={{ marginBottom: '5px' }}>
+                    <strong>{item.productName}</strong> - Đơn hàng: {item.orderId.slice(-6)}
+                  </li>
+                ))}
+                {productsInOrders.length > 5 && (
+                  <li>... và {productsInOrders.length - 5} sản phẩm khác</li>
+                )}
+              </ul>
+              <p style={{ color: '#ff4d4f', marginTop: '10px' }}>
+                Chỉ có thể xóa sản phẩm khi đơn hàng đã được giao.
+              </p>
+            </div>
+          ),
+          okText: 'Đã hiểu',
+          cancelButtonProps: { style: { display: 'none' } }
+        });
+
+        setSelectedRowKeys([]);
+        return;
+      }
+
+      // Nếu không có sản phẩm nào trong đơn hàng chưa giao, tiến hành xóa
+      mutationDeletedMany.mutate(
+        { ids, token: user?.access_token },
+        {
+          onSettled: () => {
+            queryProduct.refetch();
+            setSelectedRowKeys([]);
+          }
+        }
+      );
+
+    } catch (error) {
+      message.error('Có lỗi xảy ra khi kiểm tra đơn hàng!');
+    } finally {
+      setIsCheckingOrders(false);
+    }
+  };
+
+  // XÓA MỘT SẢN PHẨM VỚI KIỂM TRA
+  const handleDeleteProduct = async () => {
+    const productsInOrders = await checkProductsInPendingOrders([rowSelected]);
+
+    if (productsInOrders.length > 0) {
+      message.error(`Không thể xóa sản phẩm này! Đang có trong ${productsInOrders.length} đơn hàng chưa giao.`);
+      handleCancelDelete();
+      return;
+    }
+
+    mutationDeleted.mutate(
+      { id: rowSelected, token: user?.access_token },
       { onSettled: () => queryProduct.refetch() }
     );
   };
@@ -349,9 +447,6 @@ const AdminProduct = () => {
   }, [isSuccessDeleted, isErrorDeleted, dataDeleted]);
 
   const handleCancelDelete = () => setIsModalOpenDelete(false);
-  const handleDeleteProduct = () => {
-    mutationDeleted.mutate({ id: rowSelected, token: user?.access_token }, { onSettled: () => queryProduct.refetch() });
-  };
 
   const handleCloseDrawer = () => {
     setIsOpenDrawer(false);
@@ -401,6 +496,14 @@ const AdminProduct = () => {
     setStateProductDetails({ ...stateProductDetails, image: file.preview });
   };
   const handleChangeSelect = (value) => setStateProduct({ ...stateProduct, type: value });
+
+  // Hàm xử lý chọn hàng trong bảng
+  const handleRowSelection = {
+    selectedRowKeys,
+    onChange: (newSelectedRowKeys) => {
+      setSelectedRowKeys(newSelectedRowKeys);
+    },
+  };
 
   return (
     <div>
@@ -492,9 +595,11 @@ const AdminProduct = () => {
           <TableComponent
             handleDeleteManyProducts={handleDeleteManyProducts}
             columns={columns}
-            isLoading={isLoadingProducts}
+            isLoading={isLoadingProducts || isCheckingOrders}
             data={dataTable}
             scroll={{ x: 1000 }}
+            rowSelection={handleRowSelection}
+            selectedRowKeys={selectedRowKeys}
           />
         ) : (
           <Empty description="Chưa có sản phẩm nào" />
@@ -680,7 +785,12 @@ const AdminProduct = () => {
         <Loading isLoading={isLoadingDeleted}>
           <div style={{ textAlign: 'center', fontSize: '16px', padding: '20px 0' }}>
             <p>Bạn có chắc chắn muốn xóa sản phẩm này không?</p>
-            <p style={{ color: '#ff4d4f', fontWeight: '500' }}>Hành động này không thể hoàn tác!</p>
+            <p style={{ color: '#ff4d4f', fontWeight: '500', marginBottom: '10px' }}>
+              Lưu ý: Sản phẩm sẽ không thể xóa nếu đang có trong đơn hàng chưa giao.
+            </p>
+            <p style={{ color: '#faad14', fontSize: '14px' }}>
+              Hành động này không thể hoàn tác!
+            </p>
           </div>
         </Loading>
       </ModalComponent>

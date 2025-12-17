@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { Checkbox, Form, Grid } from 'antd'
+import { Checkbox, Form, Grid, Button } from 'antd'
 import { DeleteOutlined, MinusOutlined, PlusOutlined } from '@ant-design/icons'
 import {
   WrapperContainer,
@@ -56,6 +56,36 @@ const OrderPage = () => {
     address: '',
     city: '',
   })
+
+  // Address management (for selector/edit from cart)
+  const [addresses, setAddresses] = useState([])
+  const [isAddressSelectorOpen, setIsAddressSelectorOpen] = useState(false)
+  const [isAddressEditOpen, setIsAddressEditOpen] = useState(false)
+  const [editingAddress, setEditingAddress] = useState(null)
+  const [addrName2, setAddrName2] = useState('')
+  const [addrPhone2, setAddrPhone2] = useState('')
+  const [addrAddress2, setAddrAddress2] = useState('')
+  const [addrCity2, setAddrCity2] = useState('')
+  const [addrIsDefault2, setAddrIsDefault2] = useState(false)
+  const [selectedAddress, setSelectedAddress] = useState(null)
+
+  const fetchAddresses = async () => {
+    if (!user?.id) return []
+    try {
+      const res = await UserService.getAddresses(user.id, user.access_token)
+      if (res?.data) {
+        setAddresses(res.data)
+        return res.data
+      }
+      return []
+    } catch (err) {
+      console.log('❌ Lỗi fetch addresses (OrderPage)', err)
+      message.error('Không thể tải danh sách địa chỉ')
+      return []
+    }
+  }
+
+
 
   // 🧩 Tính toán giá
   const [priceMemo, setPriceMemo] = useState(0);
@@ -149,6 +179,20 @@ const OrderPage = () => {
     }
   }, [isOpenModalUpdateInfo, user])
 
+  // Fetch addresses when user logs in / changes
+  useEffect(() => {
+    if (user?.id) {
+      fetchAddresses()
+    }
+  }, [user?.id])
+
+  // Also refetch when user's addresses in redux change (keeps UI consistent after edits)
+  useEffect(() => {
+    if (user?.addresses) {
+      fetchAddresses()
+    }
+  }, [user?.addresses])
+
   useEffect(() => {
     form.setFieldsValue(stateUserDetails)
   }, [form, stateUserDetails])
@@ -171,14 +215,45 @@ const OrderPage = () => {
     setTotalPriceMemo(total);
   }, [listChecked, order?.orderItems, deliveryPriceMemo]);
 
+  // 🧩 Xử lý sử dụng thông tin cá nhân làm địa chỉ giao hàng
+  const handleUsePersonalInfo = () => {
+    const personalInfo = {
+      name: user?.data?.name || user?.name,
+      phone: user?.data?.phone || user?.phone,
+      address: user?.data?.address || user?.address,
+      city: user?.data?.city || user?.city,
+    };
+
+    // Kiểm tra xem thông tin cá nhân có đủ không
+    if (!personalInfo.name || !personalInfo.phone || !personalInfo.address || !personalInfo.city) {
+      message.error('Thông tin cá nhân chưa đầy đủ. Vui lòng cập nhật thông tin cá nhân trước.');
+      setIsAddressSelectorOpen(false);
+      setIsOpenModalUpdateInfo(true);
+      return;
+    }
+
+    // Tạo địa chỉ tạm từ thông tin cá nhân
+    const tempAddress = {
+      _id: 'personal-info', // ID đặc biệt để phân biệt
+      ...personalInfo,
+      isDefault: false,
+      isPersonalInfo: true // Thêm flag để biết đây là thông tin cá nhân
+    };
+
+    setSelectedAddress(tempAddress);
+    setIsAddressSelectorOpen(false);
+    message.success('Đã sử dụng thông tin cá nhân làm địa chỉ giao hàng!');
+  };
+
   // 🧩 Khi nhấn "Mua hàng"
   const handleAddCard = () => {
     if (!order?.orderItems?.length) {
       message.error('Giỏ hàng trống!');
     } else if (listChecked.length === 0) {
       message.error('Vui lòng chọn sản phẩm trước khi mua hàng!');
-    } else if (!user?.phone || !user?.address || !user?.name || !user?.city) {
-      setIsOpenModalUpdateInfo(true);
+    } else if (!(selectedAddress || defaultAddress)) {
+      setIsAddressSelectorOpen(true)
+      fetchAddresses()
     } else {
       const selectedItems = order?.orderItems?.filter(item =>
         listChecked.includes(item.product)
@@ -187,6 +262,7 @@ const OrderPage = () => {
       navigate('/payment', {
         state: {
           orders: selectedItems,
+          address: selectedAddress || defaultAddress
         },
       });
     }
@@ -196,7 +272,13 @@ const OrderPage = () => {
     setStateUserDetails({ ...stateUserDetails, [e.target.name]: e.target.value })
   }
 
+  // Open address selector when available; fallback to legacy update modal
   const handleChangeAddress = () => {
+    if (typeof setIsAddressSelectorOpen === 'function') {
+      setIsAddressSelectorOpen(true)
+      if (typeof fetchAddresses === 'function') fetchAddresses()
+      return
+    }
     setIsOpenModalUpdateInfo(true)
   }
 
@@ -247,21 +329,66 @@ const OrderPage = () => {
   )
 
   // 🧩 Component địa chỉ giao hàng
-  const DeliveryAddressComponent = () => (
-    <WrapperInfo
-      style={{ cursor: 'pointer' }}
-      onClick={handleChangeAddress}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-        <span style={{ fontSize: '16px', fontWeight: '600' }}>Địa chỉ giao hàng</span>
-        <span style={{ color: '#1890ff', fontSize: '14px' }}>Thay đổi</span>
-      </div>
-      <div style={{ fontSize: '14px', color: '#666', lineHeight: '1.5' }}>
-        <div><strong>{user?.name || 'Chưa có'}</strong> | {user?.phone || 'Chưa có'}</div>
-        <div>{user?.address && user?.city ? `${user.address}, ${user.city}` : 'Chưa có địa chỉ'}</div>
-      </div>
-    </WrapperInfo>
-  )
+  // Determine default address for user (prefers addresses array default, otherwise fallback to user.address)
+  const defaultAddress = useMemo(() => {
+    // prefer locally-fetched addresses (keeps UI responsive after changes)
+    const localDefault = (addresses || []).find(a => a.isDefault)
+    if (localDefault) return localDefault
+
+    // fallback to any addresses on user from redux
+    const defaultAddr = (user?.addresses || []).find(a => a.isDefault)
+    if (defaultAddr) return defaultAddr
+
+    // final fallback - legacy single address fields
+    if (user?.address || user?.city || user?.phone || user?.name) {
+      return {
+        _id: 'personal-info',
+        name: user?.name,
+        phone: user?.phone,
+        address: user?.address,
+        city: user?.city,
+        isPersonalInfo: true
+      }
+    }
+    return null
+  }, [user, addresses])
+
+  const DeliveryAddressComponent = () => {
+    const display = selectedAddress || defaultAddress
+
+    // Kiểm tra xem có phải là thông tin cá nhân không
+    const isPersonalInfo = display?._id === 'personal-info' || display?.isPersonalInfo;
+
+    return (
+      <WrapperInfo
+        style={{ cursor: 'pointer' }}
+        onClick={handleChangeAddress}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+          <span style={{ fontSize: '16px', fontWeight: '600' }}>Địa chỉ giao hàng</span>
+          <span style={{ color: '#1890ff', fontSize: '14px' }}>Thay đổi</span>
+        </div>
+        <div style={{ fontSize: '14px', color: '#666', lineHeight: '1.5' }}>
+          <div>
+            <strong>{display?.name || 'Chưa có'}</strong> | {display?.phone || 'Chưa có'}
+            {isPersonalInfo && (
+              <span style={{
+                marginLeft: '8px',
+                fontSize: '12px',
+                color: '#52c41a',
+                backgroundColor: '#f6ffed',
+                padding: '2px 6px',
+                borderRadius: '4px'
+              }}>
+                Thông tin cá nhân
+              </span>
+            )}
+          </div>
+          <div>{display?.address && display?.city ? `${display.address}, ${display.city}` : 'Chưa có địa chỉ'}</div>
+        </div>
+      </WrapperInfo>
+    )
+  }
 
   // 🧩 Render sản phẩm cho cả mobile và desktop
   const renderProductList = () => (
@@ -505,9 +632,163 @@ const OrderPage = () => {
         </div>
       </div>
 
-      {/* MODAL CẬP NHẬT THÔNG TIN */}
+      {/* Address selector modal */}
+
+      {/* ADDRESS SELECTOR MODAL */}
       <ModalComponent
-        title="Cập nhật thông tin giao hàng"
+        title="Chọn địa chỉ giao hàng"
+        open={isAddressSelectorOpen}
+        onCancel={() => setIsAddressSelectorOpen(false)}
+        width={screens.xs ? '90%' : 800}
+        footer={[
+          <Button key="add-new" type="dashed" onClick={() => {
+            setIsAddressSelectorOpen(false);
+            setIsAddressEditOpen(true);
+          }}>
+            + Thêm địa chỉ mới
+          </Button>
+        ]}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontWeight: 600 }}>Địa chỉ của bạn</div>
+            <div>
+              <Button type="primary" onClick={handleUsePersonalInfo}>
+                Sử dụng thông tin cá nhân
+              </Button>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {addresses && addresses.length > 0 ? addresses.map(addr => (
+              <div key={addr._id} style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: 12,
+                border: '1px solid #f0f0f0',
+                borderRadius: 6,
+                backgroundColor: selectedAddress?._id === addr._id ? '#f0f9ff' : 'white'
+              }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600 }}>
+                    {addr.name}
+                    {addr.isDefault && (
+                      <span style={{ color: '#1890ff', marginLeft: 8 }}>(Mặc định)</span>
+                    )}
+                  </div>
+                  <div style={{ color: '#666' }}>{addr.phone} • {addr.address}, {addr.city}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <Button
+                    type={selectedAddress?._id === addr._id ? 'primary' : 'default'}
+                    onClick={() => {
+                      setSelectedAddress(addr);
+                      setIsAddressSelectorOpen(false);
+                      message.success(`Đã chọn địa chỉ: ${addr.name}`);
+                    }}
+                  >
+                    {selectedAddress?._id === addr._id ? 'Đã chọn' : 'Chọn'}
+                  </Button>
+                  {!addr.isDefault && (
+                    <Button onClick={async () => {
+                      try {
+                        await UserService.setDefaultAddress(user.id, addr._id, user.access_token)
+                        message.success('Đã đặt làm địa chỉ mặc định')
+                        const newAddrs = await fetchAddresses()
+                        const updated = (newAddrs || []).find(a => a.isDefault)
+                        setSelectedAddress(updated || null)
+                        // refresh global user details
+                        const details = await UserService.getDetailsUser(user.id, user.access_token)
+                        dispatch(updateUser({ ...details.data, id: details.data._id, access_token: user.access_token }))
+                      } catch (err) {
+                        console.log('❌ Lỗi set default (OrderPage)', err)
+                        message.error('Lỗi khi đặt mặc định')
+                      }
+                    }}>Đặt mặc định</Button>
+                  )}
+                  <Button onClick={() => {
+                    // open edit modal
+                    setEditingAddress(addr)
+                    setAddrName2(addr.name || '')
+                    setAddrPhone2(addr.phone || '')
+                    setAddrAddress2(addr.address || '')
+                    setAddrCity2(addr.city || '')
+                    setAddrIsDefault2(!!addr.isDefault)
+                    setIsAddressSelectorOpen(false)
+                    setIsAddressEditOpen(true)
+                  }}>Sửa</Button>
+                  <Button danger onClick={async () => {
+                    try {
+                      await UserService.deleteAddress(user.id, addr._id, user.access_token)
+                      message.success('Xóa địa chỉ thành công')
+                      const newAddrs = await fetchAddresses()
+                      // if deleted address was selected, clear or set to default
+                      if (selectedAddress && selectedAddress._id === addr._id) {
+                        const def = (newAddrs || []).find(a => a.isDefault)
+                        setSelectedAddress(def || null)
+                      }
+                      const details = await UserService.getDetailsUser(user.id, user.access_token)
+                      dispatch(updateUser({ ...details.data, id: details.data._id, access_token: user.access_token }))
+                    } catch (err) {
+                      console.log('❌ Lỗi xóa (OrderPage)', err)
+                      message.error('Lỗi khi xóa địa chỉ')
+                    }
+                  }}>Xóa</Button>
+                </div>
+              </div>
+            )) : <div>Chưa có địa chỉ nào</div>}
+          </div>
+        </div>
+      </ModalComponent>
+
+      {/* ADDRESS EDIT MODAL */}
+      <ModalComponent
+        title={editingAddress ? 'Sửa địa chỉ' : 'Thêm địa chỉ'}
+        open={isAddressEditOpen}
+        onCancel={() => { setIsAddressEditOpen(false); setEditingAddress(null) }}
+        onOk={async () => {
+          if (!user?.id) return message.error('User không hợp lệ')
+          const payload = { name: addrName2, phone: addrPhone2, address: addrAddress2, city: addrCity2, isDefault: addrIsDefault2 }
+          try {
+            if (editingAddress) {
+              await UserService.updateAddress(user.id, editingAddress._id, payload, user.access_token)
+              message.success('Cập nhật địa chỉ thành công')
+            } else {
+              await UserService.addAddress(user.id, payload, user.access_token)
+              message.success('Thêm địa chỉ thành công')
+            }
+            setIsAddressEditOpen(false)
+            setEditingAddress(null)
+            await fetchAddresses()
+            const details = await UserService.getDetailsUser(user.id, user.access_token)
+            dispatch(updateUser({ ...details.data, id: details.data._id, access_token: user.access_token }))
+          } catch (err) {
+            console.log('❌ Lỗi lưu địa chỉ (OrderPage)', err)
+            message.error('Lỗi khi lưu địa chỉ')
+          }
+        }}
+        width={screens.xs ? '90%' : 600}
+      >
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <InputComponent value={addrName2} onChange={(e) => setAddrName2(e.target.value)} name="name" placeholder="Họ tên" />
+          <InputComponent value={addrPhone2} onChange={(e) => setAddrPhone2(e.target.value)} name="phone" placeholder="Số điện thoại" />
+          <InputComponent value={addrAddress2} onChange={(e) => setAddrAddress2(e.target.value)} name="address" placeholder="Địa chỉ" />
+          <InputComponent value={addrCity2} onChange={(e) => setAddrCity2(e.target.value)} name="city" placeholder="Thành phố" />
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <Checkbox
+            checked={addrIsDefault2}
+            onChange={(e) => setAddrIsDefault2(e.target.checked)}
+          >
+            Đặt làm địa chỉ mặc định
+          </Checkbox>
+        </div>
+      </ModalComponent>
+
+      {/* MODAL CẬP NHẬT THÔNG TIN CÁ NHÂN */}
+      <ModalComponent
+        title="Cập nhật thông tin cá nhân"
         open={isOpenModalUpdateInfo}
         onCancel={handleCancelUpdate}
         onOk={handleUpdateInfoUser}

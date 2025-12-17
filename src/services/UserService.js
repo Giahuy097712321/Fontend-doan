@@ -136,6 +136,65 @@ export const resetPassword = async (data) => {
     return res.data;
 };
 
+// Address management
+export const getAddresses = async (id, access_token) => {
+    const res = await axiosJWT.get(
+        `${process.env.REACT_APP_API_URL}/user/${id}/addresses`,
+        {
+            headers: { token: `Bearer ${access_token}` },
+            withCredentials: true
+        }
+    )
+    return res.data
+}
+
+export const addAddress = async (id, data, access_token) => {
+    const res = await axiosJWT.post(
+        `${process.env.REACT_APP_API_URL}/user/${id}/addresses`,
+        data,
+        {
+            headers: { token: `Bearer ${access_token}` },
+            withCredentials: true
+        }
+    )
+    return res.data
+}
+
+export const updateAddress = async (id, addressId, data, access_token) => {
+    const res = await axiosJWT.put(
+        `${process.env.REACT_APP_API_URL}/user/${id}/addresses/${addressId}`,
+        data,
+        {
+            headers: { token: `Bearer ${access_token}` },
+            withCredentials: true
+        }
+    )
+    return res.data
+}
+
+export const deleteAddress = async (id, addressId, access_token) => {
+    const res = await axiosJWT.delete(
+        `${process.env.REACT_APP_API_URL}/user/${id}/addresses/${addressId}`,
+        {
+            headers: { token: `Bearer ${access_token}` },
+            withCredentials: true
+        }
+    )
+    return res.data
+}
+
+export const setDefaultAddress = async (id, addressId, access_token) => {
+    const res = await axiosJWT.patch(
+        `${process.env.REACT_APP_API_URL}/user/${id}/addresses/${addressId}/default`,
+        {},
+        {
+            headers: { token: `Bearer ${access_token}` },
+            withCredentials: true
+        }
+    )
+    return res.data
+}
+
 // ========================
 // Interceptor cho axiosJWT
 // ========================

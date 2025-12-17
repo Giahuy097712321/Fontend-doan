@@ -13,7 +13,8 @@ import {
     Tag,
     Divider,
     Dropdown,
-    Space
+    Space,
+    Modal
 } from 'antd';
 import {
     UserOutlined,
@@ -25,7 +26,8 @@ import {
     StarFilled,
     MessageOutlined,
     DownOutlined,
-    SortAscendingOutlined
+    SortAscendingOutlined,
+    ExclamationCircleOutlined
 } from '@ant-design/icons';
 import { useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
@@ -47,8 +49,9 @@ import {
 } from './style';
 
 const { TextArea } = Input;
+const { confirm } = Modal;
 
-const CustomCommentComponent = ({ productId, productName }) => {
+const CustomCommentComponent = ({ productId }) => {
     const user = useSelector((state) => state.user);
     const navigate = useNavigate();
 
@@ -64,12 +67,11 @@ const CustomCommentComponent = ({ productId, productName }) => {
         pageSize: 5,
         total: 0
     });
-    
-    // Thêm state cho sắp xếp và lọc
+
     const [sortBy, setSortBy] = useState('newest');
     const [filterRating, setFilterRating] = useState(null);
 
-    // Lấy danh sách bình luận với sắp xếp và lọc
+    // Lấy danh sách bình luận
     const fetchComments = async (page = 1, sort = sortBy, filter = filterRating) => {
         if (!productId) return;
 
@@ -79,7 +81,7 @@ const CustomCommentComponent = ({ productId, productName }) => {
                 page,
                 limit: pagination.pageSize,
                 sort: sort,
-                rating: filter // Thêm filter rating nếu có
+                rating: filter
             });
 
             if (result.status === 'OK') {
@@ -114,27 +116,31 @@ const CustomCommentComponent = ({ productId, productName }) => {
         }
     };
 
+    // Fetch cả comments và rating stats
+    const fetchAllData = async (page = 1) => {
+        await Promise.all([
+            fetchComments(page, sortBy, filterRating),
+            fetchRatingStats()
+        ]);
+    };
+
     useEffect(() => {
         if (productId) {
-            fetchComments(1);
-            fetchRatingStats();
+            fetchAllData(1);
         }
     }, [productId]);
 
-    // Xử lý thay đổi sắp xếp
     const handleSortChange = (newSort) => {
         setSortBy(newSort);
         fetchComments(1, newSort, filterRating);
     };
 
-    // Xử lý lọc theo rating
-    const handleFilterRating = (rating) => {
-        const newFilter = filterRating === rating ? null : rating;
+    const handleFilterRating = (star) => {
+        const newFilter = filterRating === star ? null : star;
         setFilterRating(newFilter);
         fetchComments(1, sortBy, newFilter);
     };
 
-    // Xử lý gửi bình luận
     const handleSubmitComment = async () => {
         if (!user?.id) {
             message.warning('Vui lòng đăng nhập để bình luận');
@@ -162,14 +168,12 @@ const CustomCommentComponent = ({ productId, productName }) => {
                     data,
                     user.access_token
                 );
-                
+
                 if (result.status === 'OK') {
                     message.success('Cập nhật bình luận thành công');
-                    setCommentText('');
-                    setRating(5);
-                    setEditingComment(null);
-                    fetchComments(pagination.current, sortBy, filterRating);
-                    fetchRatingStats();
+                    resetForm();
+                    // Fetch lại tất cả dữ liệu
+                    await fetchAllData(pagination.current);
                 } else {
                     message.error(result.message || 'Lỗi khi cập nhật bình luận');
                 }
@@ -179,46 +183,64 @@ const CustomCommentComponent = ({ productId, productName }) => {
                     data,
                     user.access_token
                 );
-                
+
                 if (result.status === 'OK') {
                     message.success('Thêm bình luận thành công');
-                    setCommentText('');
-                    setRating(5);
-                    setEditingComment(null);
-                    fetchComments(1, sortBy, filterRating);
-                    fetchRatingStats();
+                    resetForm();
+                    // Fetch lại từ trang 1
+                    await fetchAllData(1);
                 } else {
                     message.error(result.message || 'Lỗi khi thêm bình luận');
                 }
             }
         } catch (error) {
             console.error('Lỗi khi gửi bình luận:', error);
-            message.error(editingComment ? 'Lỗi khi cập nhật bình luận' : 'Lỗi khi thêm bình luận');
+            if (error.response?.data?.message) {
+                message.error(error.response.data.message);
+            } else {
+                message.error(editingComment ? 'Lỗi khi cập nhật bình luận' : 'Lỗi khi thêm bình luận');
+            }
         } finally {
             setSubmitting(false);
         }
     };
 
-    // Xóa bình luận
-    const handleDeleteComment = async (commentId) => {
-        try {
-            const result = await CommentService.deleteComment(
-                productId,
-                commentId,
-                user.access_token
-            );
+    const resetForm = () => {
+        setCommentText('');
+        setRating(5);
+        setEditingComment(null);
+    };
 
-            if (result.status === 'OK') {
-                message.success('Xóa bình luận thành công');
-                fetchComments(pagination.current, sortBy, filterRating);
-                fetchRatingStats();
-            } else {
-                message.error(result.message || 'Lỗi khi xóa bình luận');
+    // Xóa bình luận - ĐÃ SỬA
+    const handleDeleteComment = async (commentId) => {
+        confirm({
+            title: 'Xác nhận xóa',
+            icon: <ExclamationCircleOutlined />,
+            content: 'Bạn có chắc chắn muốn xóa bình luận này?',
+            okText: 'Xóa',
+            okType: 'danger',
+            cancelText: 'Hủy',
+            async onOk() {
+                try {
+                    const result = await CommentService.deleteComment(
+                        productId,
+                        commentId,
+                        user.access_token
+                    );
+
+                    if (result.status === 'OK') {
+                        message.success('Xóa bình luận thành công');
+                        // Fetch lại tất cả dữ liệu
+                        await fetchAllData(pagination.current);
+                    } else {
+                        message.error(result.message || 'Lỗi khi xóa bình luận');
+                    }
+                } catch (error) {
+                    console.error('Lỗi khi xóa bình luận:', error);
+                    message.error('Lỗi khi xóa bình luận');
+                }
             }
-        } catch (error) {
-            console.error('Lỗi khi xóa bình luận:', error);
-            message.error('Lỗi khi xóa bình luận');
-        }
+        });
     };
 
     // Like/Unlike bình luận
@@ -234,9 +256,10 @@ const CustomCommentComponent = ({ productId, productName }) => {
                 commentId,
                 user.access_token
             );
-            
+
             if (result.status === 'OK') {
-                fetchComments(pagination.current, sortBy, filterRating);
+                // Chỉ fetch lại comments (không cần rating stats khi like)
+                await fetchComments(pagination.current, sortBy, filterRating);
             } else {
                 message.error(result.message || 'Lỗi khi thích bình luận');
             }
@@ -246,61 +269,51 @@ const CustomCommentComponent = ({ productId, productName }) => {
         }
     };
 
-    // Chỉnh sửa bình luận
     const handleEditComment = (comment) => {
         setEditingComment(comment);
         setRating(comment.rating);
         setCommentText(comment.comment);
     };
 
-    // Hủy chỉnh sửa
     const handleCancelEdit = () => {
-        setEditingComment(null);
-        setRating(5);
-        setCommentText('');
+        resetForm();
     };
 
-    // Phân trang
     const handlePageChange = (page) => {
         fetchComments(page, sortBy, filterRating);
     };
 
-    // Tính phần trăm cho mỗi sao
     const calculateStarPercentage = (star) => {
         if (!ratingStats || !ratingStats.ratingCounts || ratingStats.totalRatings === 0) return 0;
         const count = ratingStats.ratingCounts[star] || 0;
         return (count / ratingStats.totalRatings) * 100;
     };
 
-    // Format thời gian
     const formatTime = (dateString) => {
         try {
             const date = new Date(dateString);
             const now = new Date();
             const diffInSeconds = Math.floor((now - date) / 1000);
-            
+
             if (diffInSeconds < 60) return 'Vừa xong';
             if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} phút trước`;
             if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} giờ trước`;
             if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)} ngày trước`;
-            
+
             return date.toLocaleDateString('vi-VN');
         } catch (error) {
             return 'Không xác định';
         }
     };
 
-    // Kiểm tra xem user có phải là chủ comment không
     const isCommentOwner = (comment) => {
         return comment.user?._id === user?.id || comment.user === user?.id;
     };
 
-    // Kiểm tra xem user đã like comment chưa
     const isCommentLiked = (comment) => {
         return comment.likes?.includes(user?.id);
     };
 
-    // Menu sắp xếp
     const sortItems = [
         {
             key: 'newest',
@@ -316,21 +329,14 @@ const CustomCommentComponent = ({ productId, productName }) => {
             key: 'lowest_rating',
             label: 'Đánh giá thấp nhất',
             onClick: () => handleSortChange('lowest_rating')
-        },
-        {
-            key: 'most_likes',
-            label: 'Nhiều like nhất',
-            onClick: () => handleSortChange('most_likes')
         }
     ];
 
-    // Lấy tên hiển thị cho sắp xếp
     const getSortDisplayName = () => {
         const sortMap = {
             'newest': 'Mới nhất',
             'highest_rating': 'Đánh giá cao',
-            'lowest_rating': 'Đánh giá thấp',
-            'most_likes': 'Nhiều like'
+            'lowest_rating': 'Đánh giá thấp'
         };
         return sortMap[sortBy] || 'Mới nhất';
     };
@@ -347,26 +353,26 @@ const CustomCommentComponent = ({ productId, productName }) => {
                                 <span className="rating-max">/5</span>
                             </div>
                             <div className="rating-stars">
-                                <Rate 
-                                    value={ratingStats.averageRating || 0} 
-                                    disabled 
-                                    allowHalf 
+                                <Rate
+                                    value={ratingStats.averageRating || 0}
+                                    disabled
+                                    allowHalf
                                 />
                             </div>
                             <div className="rating-count">
                                 {ratingStats.totalRatings || 0} đánh giá
                             </div>
                         </div>
-                        
+
                         <Divider type="vertical" style={{ height: '80px', margin: '0 32px' }} />
-                        
+
                         <RatingStats>
                             {[5, 4, 3, 2, 1].map(star => (
                                 <StarProgress key={star}>
-                                    <div 
+                                    <div
                                         className="star-info clickable"
                                         onClick={() => handleFilterRating(star)}
-                                        style={{ 
+                                        style={{
                                             cursor: 'pointer',
                                             opacity: filterRating === star ? 1 : 0.7
                                         }}
@@ -375,7 +381,7 @@ const CustomCommentComponent = ({ productId, productName }) => {
                                         <StarFilled className="star-icon" />
                                     </div>
                                     <div className="progress-container">
-                                        <div 
+                                        <div
                                             className="progress-bar"
                                             style={{ width: `${calculateStarPercentage(star)}%` }}
                                         />
@@ -387,14 +393,13 @@ const CustomCommentComponent = ({ productId, productName }) => {
                             ))}
                         </RatingStats>
                     </div>
-                    
-                    {/* Hiển thị filter đang active */}
+
                     {filterRating && (
                         <div style={{ marginTop: '16px', textAlign: 'center' }}>
-                            <Tag 
-                                color="blue" 
-                                closable 
-                                onClose={() => handleFilterRating(null)}
+                            <Tag
+                                color="blue"
+                                closable
+                                onClose={() => setFilterRating(null)}
                             >
                                 Đang lọc: {filterRating} sao
                             </Tag>
@@ -422,7 +427,7 @@ const CustomCommentComponent = ({ productId, productName }) => {
                     <Rate
                         value={rating}
                         onChange={setRating}
-                        disabled={!user?.id}
+                        disabled={!user?.id || submitting}
                         className="rating-stars-input"
                     />
                     <span className="rating-value">{rating} sao</span>
@@ -439,13 +444,16 @@ const CustomCommentComponent = ({ productId, productName }) => {
                     }
                     disabled={!user?.id || submitting}
                     className="comment-textarea"
+                    maxLength={500}
+                    showCount
                 />
 
                 <div className="form-actions">
                     {editingComment && (
-                        <Button 
+                        <Button
                             onClick={handleCancelEdit}
                             className="cancel-btn"
+                            disabled={submitting}
                         >
                             Hủy
                         </Button>
@@ -502,18 +510,18 @@ const CustomCommentComponent = ({ productId, productName }) => {
                                 <CommentItem key={comment._id}>
                                     <div className="comment-avatar">
                                         <Avatar
-                                            src={comment.userAvatar || comment.user?.avatar}
+                                            src={comment.userAvatar}
                                             icon={<UserOutlined />}
                                             size={48}
                                             className="avatar"
                                         />
                                     </div>
-                                    
+
                                     <div className="comment-content">
                                         <CommentMeta>
                                             <div className="user-info">
                                                 <span className="user-name">
-                                                    {comment.userName || comment.user?.name}
+                                                    {comment.userName}
                                                 </span>
                                                 {isCommentOwner(comment) && (
                                                     <UserBadge>
@@ -521,10 +529,10 @@ const CustomCommentComponent = ({ productId, productName }) => {
                                                     </UserBadge>
                                                 )}
                                                 <div className="comment-rating">
-                                                    <Rate 
-                                                        value={comment.rating} 
-                                                        disabled 
-                                                        size="small" 
+                                                    <Rate
+                                                        value={comment.rating}
+                                                        disabled
+                                                        size="small"
                                                     />
                                                     <span className="rating-text">{comment.rating} sao</span>
                                                 </div>
@@ -590,7 +598,7 @@ const CustomCommentComponent = ({ productId, productName }) => {
                                     onChange={handlePageChange}
                                     showSizeChanger={false}
                                     showQuickJumper
-                                    showTotal={(total, range) => 
+                                    showTotal={(total, range) =>
                                         `${range[0]}-${range[1]} của ${total} đánh giá`
                                     }
                                 />
@@ -605,7 +613,7 @@ const CustomCommentComponent = ({ productId, productName }) => {
                                 <div>
                                     <p style={{ fontSize: '16px', marginBottom: '8px' }}>Chưa có đánh giá nào</p>
                                     <p style={{ fontSize: '14px', color: '#666' }}>
-                                        {filterRating 
+                                        {filterRating
                                             ? `Không có đánh giá ${filterRating} sao nào`
                                             : 'Hãy là người đầu tiên đánh giá sản phẩm này!'
                                         }

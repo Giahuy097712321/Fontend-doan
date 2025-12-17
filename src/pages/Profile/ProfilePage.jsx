@@ -37,6 +37,17 @@ const ProfilePage = () => {
   const [isForgotPasswordModalOpen, setIsForgotPasswordModalOpen] = useState(false)
   const dispatch = useDispatch()
 
+  // Address management UI state
+  const [showAddressManager, setShowAddressManager] = useState(false)
+  const [addresses, setAddresses] = useState([])
+  const [addrName, setAddrName] = useState('')
+  const [addrPhone, setAddrPhone] = useState('')
+  const [addrAddress, setAddrAddress] = useState('')
+  const [addrCity, setAddrCity] = useState('')
+  const [addrIsDefault, setAddrIsDefault] = useState(false)
+  const [editingAddressId, setEditingAddressId] = useState(null)
+
+
   const mutation = useMutationHooks((data) => {
     const { id, access_token, ...rests } = data
     console.log("🔹 Gọi update với id:", id)
@@ -68,6 +79,97 @@ const ProfilePage = () => {
       console.log("❌ Lỗi lấy chi tiết user:", error)
     }
   }, [dispatch])
+
+  // Address handlers
+  const fetchAddresses = async () => {
+    if (!user?.id) return
+    try {
+      const res = await UserService.getAddresses(user.id, user.access_token)
+      if (res?.data) setAddresses(res.data)
+    } catch (err) {
+      console.log('❌ Lỗi fetch addresses', err)
+    }
+  }
+
+  useEffect(() => {
+    if (showAddressManager && user?.id) {
+      fetchAddresses()
+    }
+  }, [showAddressManager, user?.id])
+
+  const handleEditAddress = (addr) => {
+    setEditingAddressId(addr._id)
+    setAddrName(addr.name || '')
+    setAddrPhone(addr.phone || '')
+    setAddrAddress(addr.address || '')
+    setAddrCity(addr.city || '')
+    setAddrIsDefault(!!addr.isDefault)
+  }
+
+  const handleCancelEdit = () => {
+    setEditingAddressId(null)
+    setAddrName('')
+    setAddrPhone('')
+    setAddrAddress('')
+    setAddrCity('')
+    setAddrIsDefault(false)
+  }
+
+  const handleSaveAddress = async () => {
+    if (!user?.id) return message.error('User not found')
+
+    // phone should be a string so it can start with 0
+    const payload = {
+      name: addrName,
+      phone: addrPhone,
+      address: addrAddress,
+      city: addrCity,
+      isDefault: addrIsDefault
+    }
+
+    try {
+      if (editingAddressId) {
+        await UserService.updateAddress(user.id, editingAddressId, payload, user.access_token)
+        message.success('Cập nhật địa chỉ thành công')
+      } else {
+        await UserService.addAddress(user.id, payload, user.access_token)
+        message.success('Thêm địa chỉ thành công')
+      }
+      handleCancelEdit()
+      fetchAddresses()
+      // refresh user details
+      handleGetDetailsUser(user.id, user.access_token)
+    } catch (err) {
+      console.log('❌ Lỗi lưu địa chỉ', err)
+      message.error('Lỗi khi lưu địa chỉ')
+    }
+  }
+
+  const handleDeleteAddress = async (addressId) => {
+    if (!user?.id) return
+    try {
+      await UserService.deleteAddress(user.id, addressId, user.access_token)
+      message.success('Xóa địa chỉ thành công')
+      fetchAddresses()
+      handleGetDetailsUser(user.id, user.access_token)
+    } catch (err) {
+      console.log('❌ Lỗi xóa địa chỉ', err)
+      message.error('Lỗi khi xóa địa chỉ')
+    }
+  }
+
+  const handleSetDefaultAddress = async (addressId) => {
+    if (!user?.id) return
+    try {
+      await UserService.setDefaultAddress(user.id, addressId, user.access_token)
+      message.success('Đã đặt làm địa chỉ mặc định')
+      fetchAddresses()
+      handleGetDetailsUser(user.id, user.access_token)
+    } catch (err) {
+      console.log('❌ Lỗi set default', err)
+      message.error('Lỗi khi đặt mặc định')
+    }
+  }
 
   useEffect(() => {
     if (isSuccess) {
@@ -363,6 +465,63 @@ const ProfilePage = () => {
                       }}
                       textButton={'Cập nhật'}
                     />
+                  </div>
+                </WrapperInput>
+
+                {/* Address Manager */}
+                <WrapperInput>
+                  <WrapperLabel>
+                    <EnvironmentOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
+                    Quản lý địa chỉ giao hàng
+                  </WrapperLabel>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <Button
+                        onClick={() => setShowAddressManager(!showAddressManager)}
+                        type="default"
+                      >{showAddressManager ? 'Đóng quản lý địa chỉ' : 'Mở quản lý địa chỉ'}</Button>
+                      {showAddressManager && (
+                        <Button type="primary" onClick={() => handleCancelEdit()}>
+                          Thêm địa chỉ mới
+                        </Button>
+                      )}
+                    </div>
+
+                    {showAddressManager && (
+                      <div style={{ border: '1px solid #f0f0f0', padding: '12px', borderRadius: '8px' }}>
+                        {/* Form */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                          <InputForm id="addrName" value={addrName} onChange={setAddrName} placeholder="Tên người nhận" />
+                          <InputForm id="addrPhone" value={addrPhone} onChange={setAddrPhone} placeholder="Số điện thoại (có thể bắt đầu 0)" />
+                          <InputForm id="addrAddress" value={addrAddress} onChange={setAddrAddress} placeholder="Địa chỉ" />
+                          <InputForm id="addrCity" value={addrCity} onChange={setAddrCity} placeholder="Tỉnh / Thành phố" />
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <Button type={addrIsDefault ? 'primary' : 'default'} onClick={() => setAddrIsDefault(!addrIsDefault)}>
+                            {addrIsDefault ? 'Địa chỉ mặc định' : 'Đặt làm mặc định'}
+                          </Button>
+                          <Button type="primary" onClick={() => handleSaveAddress()}>{editingAddressId ? 'Lưu' : 'Thêm'}</Button>
+                          <Button onClick={() => handleCancelEdit()}>Hủy</Button>
+                        </div>
+
+                        {/* List */}
+                        <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {addresses && addresses.length > 0 ? addresses.map(addr => (
+                            <div key={addr._id} style={{ padding: '12px', borderRadius: '6px', background: '#fff', border: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div>
+                                <div style={{ fontWeight: '600' }}>{addr.name} {addr.isDefault && <span style={{ color: '#1890ff', marginLeft: '8px' }}>(Mặc định)</span>}</div>
+                                <div style={{ color: '#666' }}>{addr.phone} • {addr.address}, {addr.city}</div>
+                              </div>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                {!addr.isDefault && <Button onClick={() => handleSetDefaultAddress(addr._id)}>Đặt mặc định</Button>}
+                                <Button onClick={() => handleEditAddress(addr)}>Sửa</Button>
+                                <Button danger onClick={() => handleDeleteAddress(addr._id)}>Xóa</Button>
+                              </div>
+                            </div>
+                          )) : <div>Chưa có địa chỉ nào</div>}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </WrapperInput>
               </div>
