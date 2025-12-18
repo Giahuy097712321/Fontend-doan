@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { Checkbox, Form, Grid, Button } from 'antd'
-import { DeleteOutlined, MinusOutlined, PlusOutlined } from '@ant-design/icons'
+import { Checkbox, Form, Grid, Button, Modal } from 'antd'
+import { DeleteOutlined, MinusOutlined, PlusOutlined, ExclamationCircleOutlined } from '@ant-design/icons'
 import {
   WrapperContainer,
   WrapperCountOrder,
@@ -25,6 +25,9 @@ import {
   removeOrderProduct,
   removeAllOrderProduct,
   selectedOrder,
+  syncCartWithProducts,
+  updateCartProducts,
+  handleProductDeletion
 } from '../../redux/sildes/orderSlide'
 import { updateUser } from '../../redux/sildes/userSlide'
 
@@ -32,6 +35,7 @@ import { converPrice } from './../../utils'
 import ModalComponent from './../../components/ModalComponent/ModalComponent'
 import InputComponent from './../../components/InputComponent/InputComponent'
 import * as UserService from '../../services/UserService'
+import * as ProductService from '../../services/ProductService' // THÊM IMPORT
 import { useMutationHooks } from './../../hooks/useMutationHook'
 import Loading from './../../components/LoadingComponent/Loading'
 import { message } from 'antd';
@@ -39,6 +43,7 @@ import { useNavigate } from 'react-router-dom';
 import Step from '../../components/Step/StepComponent';
 
 const { useBreakpoint } = Grid;
+const { confirm } = Modal;
 
 const OrderPage = () => {
   const navigate = useNavigate();
@@ -57,7 +62,7 @@ const OrderPage = () => {
     city: '',
   })
 
-  // Address management (for selector/edit from cart)
+  // Address management
   const [addresses, setAddresses] = useState([])
   const [isAddressSelectorOpen, setIsAddressSelectorOpen] = useState(false)
   const [isAddressEditOpen, setIsAddressEditOpen] = useState(false)
@@ -68,24 +73,7 @@ const OrderPage = () => {
   const [addrCity2, setAddrCity2] = useState('')
   const [addrIsDefault2, setAddrIsDefault2] = useState(false)
   const [selectedAddress, setSelectedAddress] = useState(null)
-
-  const fetchAddresses = async () => {
-    if (!user?.id) return []
-    try {
-      const res = await UserService.getAddresses(user.id, user.access_token)
-      if (res?.data) {
-        setAddresses(res.data)
-        return res.data
-      }
-      return []
-    } catch (err) {
-      console.log('❌ Lỗi fetch addresses (OrderPage)', err)
-      message.error('Không thể tải danh sách địa chỉ')
-      return []
-    }
-  }
-
-
+  const [isValidatingCart, setIsValidatingCart] = useState(false)
 
   // 🧩 Tính toán giá
   const [priceMemo, setPriceMemo] = useState(0);
@@ -107,6 +95,218 @@ const OrderPage = () => {
   })
 
   const { isLoading } = mutationUpdate
+
+  // 🧩 HÀM KIỂM TRA VÀ ĐỒNG BỘ GIỎ HÀNG
+  const validateAndSyncCart = async () => {
+    if (!order?.orderItems?.length) return;
+
+    setIsValidatingCart(true);
+    try {
+      // Lấy danh sách sản phẩm hiện có
+      const res = await ProductService.getAllProduct();
+      const allProducts = res?.data || [];
+      const existingProductIds = allProducts.map(p => p._id);
+
+      // Kiểm tra sản phẩm không còn tồn tại
+      const deletedProducts = order.orderItems.filter(item =>
+        !existingProductIds.includes(item.product)
+      );
+
+      // Kiểm tra sản phẩm hết hàng
+      const outOfStockProducts = [];
+      const updatedOrderItems = order.orderItems.map(item => {
+        const product = allProducts.find(p => p._id === item.product);
+
+        if (!product) return null;
+
+        // Kiểm tra tồn kho
+        if (product.countInStock < item.amount) {
+          outOfStockProducts.push({
+            ...item,
+            currentStock: product.countInStock,
+            productName: product.name
+          });
+
+          // Điều chỉnh số lượng nếu còn ít hơn
+          return {
+            ...item,
+            amount: Math.min(item.amount, product.countInStock),
+            name: product.name,
+            price: product.price,
+            image: product.image,
+            discount: product.discount || 0,
+            countInStock: product.countInStock
+          };
+        }
+
+        // Cập nhật thông tin mới
+        return {
+          ...item,
+          name: product.name,
+          price: product.price,
+          image: product.image,
+          discount: product.discount || 0,
+          countInStock: product.countInStock
+        };
+      }).filter(Boolean);
+
+      // Xử lý sản phẩm bị xóa
+      if (deletedProducts.length > 0) {
+        const deletedProductIds = deletedProducts.map(p => p.product);
+
+        confirm({
+          title: 'Cập nhật giỏ hàng',
+          icon: <ExclamationCircleOutlined />,
+          content: (
+            <div>
+              <p>Đã phát hiện {deletedProducts.length} sản phẩm không còn tồn tại trong hệ thống:</p>
+              <ul style={{ maxHeight: '150px', overflowY: 'auto', paddingLeft: '20px' }}>
+                {deletedProducts.slice(0, 5).map((item, index) => (
+                  <li key={index} style={{ marginBottom: '5px' }}>
+                    <strong>{item.name}</strong>
+                  </li>
+                ))}
+                {deletedProducts.length > 5 && (
+                  <li>...và {deletedProducts.length - 5} sản phẩm khác</li>
+                )}
+              </ul>
+              <p style={{ marginTop: '10px', color: '#faad14' }}>
+                Các sản phẩm này sẽ được xóa khỏi giỏ hàng.
+              </p>
+            </div>
+          ),
+          okText: 'Đồng ý',
+          cancelText: 'Hủy',
+          onOk: () => {
+            // Đồng bộ giỏ hàng
+            dispatch(syncCartWithProducts({ existingProductIds }));
+
+            // Cập nhật thông tin sản phẩm
+            if (updatedOrderItems.length > 0) {
+              dispatch(updateCartProducts({
+                updatedProducts: allProducts.filter(p =>
+                  updatedOrderItems.some(item => item.product === p._id)
+                )
+              }));
+            }
+
+            // Cập nhật listChecked
+            const newListChecked = listChecked.filter(id =>
+              existingProductIds.includes(id)
+            );
+            setListChecked(newListChecked);
+
+            message.warning(`Đã xóa ${deletedProducts.length} sản phẩm không tồn tại khỏi giỏ hàng`);
+          }
+        });
+      }
+
+      // Xử lý sản phẩm hết hàng
+      if (outOfStockProducts.length > 0) {
+        const productIdsToUpdate = outOfStockProducts.map(p => p.product);
+
+        confirm({
+          title: 'Điều chỉnh số lượng',
+          icon: <ExclamationCircleOutlined />,
+          content: (
+            <div>
+              <p>Một số sản phẩm trong giỏ hàng đã vượt quá số lượng tồn kho:</p>
+              <ul style={{ maxHeight: '150px', overflowY: 'auto', paddingLeft: '20px' }}>
+                {outOfStockProducts.slice(0, 5).map((item, index) => (
+                  <li key={index} style={{ marginBottom: '5px' }}>
+                    <strong>{item.productName}</strong>:
+                    Bạn chọn {item.amount} nhưng chỉ còn {item.currentStock} sản phẩm
+                  </li>
+                ))}
+                {outOfStockProducts.length > 5 && (
+                  <li>...và {outOfStockProducts.length - 5} sản phẩm khác</li>
+                )}
+              </ul>
+              <p style={{ marginTop: '10px', color: '#1890ff' }}>
+                Số lượng sẽ được điều chỉnh về mức tồn kho hiện có.
+              </p>
+            </div>
+          ),
+          okText: 'Điều chỉnh',
+          cancelText: 'Hủy',
+          onOk: () => {
+            // Cập nhật thông tin sản phẩm
+            dispatch(updateCartProducts({
+              updatedProducts: allProducts.filter(p =>
+                updatedOrderItems.some(item => item.product === p._id)
+              )
+            }));
+
+            message.info(`Đã điều chỉnh số lượng cho ${outOfStockProducts.length} sản phẩm`);
+          }
+        });
+      }
+
+      // Nếu không có vấn đề gì, chỉ cập nhật thông tin
+      if (deletedProducts.length === 0 && outOfStockProducts.length === 0) {
+        dispatch(updateCartProducts({
+          updatedProducts: allProducts.filter(p =>
+            order.orderItems.some(item => item.product === p._id)
+          )
+        }));
+      }
+
+    } catch (error) {
+      console.error('Lỗi khi kiểm tra giỏ hàng:', error);
+      message.error('Có lỗi xảy ra khi kiểm tra giỏ hàng');
+    } finally {
+      setIsValidatingCart(false);
+    }
+  };
+
+  // 🧩 Lắng nghe sự kiện sản phẩm bị xóa
+  useEffect(() => {
+    const handleProductDeleted = (event) => {
+      const { productId } = event.detail;
+
+      if (order?.orderItems?.some(item => item.product === productId)) {
+        dispatch(handleProductDeletion({ deletedProductIds: [productId] }));
+
+        // Cập nhật listChecked
+        const newListChecked = listChecked.filter(id => id !== productId);
+        setListChecked(newListChecked);
+
+        message.warning({
+          content: 'Một sản phẩm trong giỏ hàng đã bị xóa khỏi hệ thống',
+          duration: 3,
+        });
+      }
+    };
+
+    window.addEventListener('productDeleted', handleProductDeleted);
+
+    return () => {
+      window.removeEventListener('productDeleted', handleProductDeleted);
+    };
+  }, [order?.orderItems, listChecked, dispatch]);
+
+  // 🧩 Kiểm tra giỏ hàng khi mở trang
+  useEffect(() => {
+    if (order?.orderItems?.length > 0) {
+      validateAndSyncCart();
+    }
+  }, []); // Chạy khi component mount
+
+  const fetchAddresses = async () => {
+    if (!user?.id) return []
+    try {
+      const res = await UserService.getAddresses(user.id, user.access_token)
+      if (res?.data) {
+        setAddresses(res.data)
+        return res.data
+      }
+      return []
+    } catch (err) {
+      console.log('❌ Lỗi fetch addresses (OrderPage)', err)
+      message.error('Không thể tải danh sách địa chỉ')
+      return []
+    }
+  }
 
   // 🧩 Cập nhật thông tin giao hàng
   const handleUpdateInfoUser = () => {
@@ -163,6 +363,7 @@ const OrderPage = () => {
   const handleRemoveAllOrder = () => {
     if (listChecked.length > 0) {
       dispatch(removeAllOrderProduct({ listChecked }))
+      setListChecked([])
       message.success('Đã xóa sản phẩm đã chọn!')
     }
   }
@@ -179,14 +380,13 @@ const OrderPage = () => {
     }
   }, [isOpenModalUpdateInfo, user])
 
-  // Fetch addresses when user logs in / changes
+  // Fetch addresses khi user đăng nhập
   useEffect(() => {
     if (user?.id) {
       fetchAddresses()
     }
   }, [user?.id])
 
-  // Also refetch when user's addresses in redux change (keeps UI consistent after edits)
   useEffect(() => {
     if (user?.addresses) {
       fetchAddresses()
@@ -224,7 +424,6 @@ const OrderPage = () => {
       city: user?.data?.city || user?.city,
     };
 
-    // Kiểm tra xem thông tin cá nhân có đủ không
     if (!personalInfo.name || !personalInfo.phone || !personalInfo.address || !personalInfo.city) {
       message.error('Thông tin cá nhân chưa đầy đủ. Vui lòng cập nhật thông tin cá nhân trước.');
       setIsAddressSelectorOpen(false);
@@ -232,12 +431,11 @@ const OrderPage = () => {
       return;
     }
 
-    // Tạo địa chỉ tạm từ thông tin cá nhân
     const tempAddress = {
-      _id: 'personal-info', // ID đặc biệt để phân biệt
+      _id: 'personal-info',
       ...personalInfo,
       isDefault: false,
-      isPersonalInfo: true // Thêm flag để biết đây là thông tin cá nhân
+      isPersonalInfo: true
     };
 
     setSelectedAddress(tempAddress);
@@ -245,16 +443,87 @@ const OrderPage = () => {
     message.success('Đã sử dụng thông tin cá nhân làm địa chỉ giao hàng!');
   };
 
-  // 🧩 Khi nhấn "Mua hàng"
-  const handleAddCard = () => {
+  // 🧩 Khi nhấn "Mua hàng" - Thêm validation cuối cùng
+  const handleAddCard = async () => {
     if (!order?.orderItems?.length) {
       message.error('Giỏ hàng trống!');
-    } else if (listChecked.length === 0) {
+      return;
+    }
+
+    if (listChecked.length === 0) {
       message.error('Vui lòng chọn sản phẩm trước khi mua hàng!');
-    } else if (!(selectedAddress || defaultAddress)) {
-      setIsAddressSelectorOpen(true)
-      fetchAddresses()
-    } else {
+      return;
+    }
+
+    // Validation cuối cùng trước khi thanh toán
+    setIsValidatingCart(true);
+    try {
+      const productIds = listChecked;
+      const res = await ProductService.getAllProduct();
+      const allProducts = res?.data || [];
+
+      // Kiểm tra sản phẩm còn tồn tại
+      const validProducts = productIds.filter(id =>
+        allProducts.some(p => p._id === id)
+      );
+
+      if (validProducts.length !== productIds.length) {
+        // Có sản phẩm đã bị xóa
+        const deletedCount = productIds.length - validProducts.length;
+        message.error(`${deletedCount} sản phẩm đã không còn tồn tại. Vui lòng kiểm tra lại giỏ hàng.`);
+
+        // Đồng bộ lại
+        const existingProductIds = allProducts.map(p => p._id);
+        dispatch(syncCartWithProducts({ existingProductIds }));
+
+        // Cập nhật listChecked
+        setListChecked(validProducts);
+        return;
+      }
+
+      // Kiểm tra tồn kho
+      const outOfStockItems = [];
+      order.orderItems.forEach(item => {
+        if (listChecked.includes(item.product)) {
+          const product = allProducts.find(p => p._id === item.product);
+          if (product && product.countInStock < item.amount) {
+            outOfStockItems.push({
+              name: product.name,
+              requested: item.amount,
+              available: product.countInStock
+            });
+          }
+        }
+      });
+
+      if (outOfStockItems.length > 0) {
+        Modal.error({
+          title: 'Sản phẩm vượt quá số lượng tồn kho',
+          content: (
+            <div>
+              <p>Một số sản phẩm đã vượt quá số lượng tồn kho:</p>
+              <ul>
+                {outOfStockItems.map((item, index) => (
+                  <li key={index}>
+                    <strong>{item.name}</strong>: Bạn chọn {item.requested} nhưng chỉ còn {item.available}
+                  </li>
+                ))}
+              </ul>
+              <p>Vui lòng điều chỉnh số lượng trước khi tiếp tục.</p>
+            </div>
+          )
+        });
+        return;
+      }
+
+      // Kiểm tra địa chỉ
+      if (!(selectedAddress || defaultAddress)) {
+        setIsAddressSelectorOpen(true)
+        fetchAddresses()
+        return;
+      }
+
+      // Mọi thứ đều OK, chuyển đến trang thanh toán
       const selectedItems = order?.orderItems?.filter(item =>
         listChecked.includes(item.product)
       );
@@ -265,6 +534,12 @@ const OrderPage = () => {
           address: selectedAddress || defaultAddress
         },
       });
+
+    } catch (error) {
+      console.error('Lỗi khi xác thực đơn hàng:', error);
+      message.error('Có lỗi xảy ra khi xác thực đơn hàng');
+    } finally {
+      setIsValidatingCart(false);
     }
   };
 
@@ -272,7 +547,6 @@ const OrderPage = () => {
     setStateUserDetails({ ...stateUserDetails, [e.target.name]: e.target.value })
   }
 
-  // Open address selector when available; fallback to legacy update modal
   const handleChangeAddress = () => {
     if (typeof setIsAddressSelectorOpen === 'function') {
       setIsAddressSelectorOpen(true)
@@ -304,42 +578,14 @@ const OrderPage = () => {
     return 3;
   }
 
-  // 🧩 Component tóm tắt đơn hàng
-  const OrderSummaryComponent = () => (
-    <OrderSummary>
-      <div className="summary-header">Tóm tắt đơn hàng</div>
-      <div className="summary-item">
-        <span>Tạm tính</span>
-        <span>{converPrice(priceMemo)}</span>
-      </div>
-      <div className="summary-item">
-        <span>Giảm giá</span>
-        <span className="discount">-{converPrice(priceDiscountMemo)}</span>
-      </div>
-      <div className="summary-item">
-        <span>Phí giao hàng</span>
-        <span>{converPrice(deliveryPriceMemo)}</span>
-      </div>
-      <div className="divider"></div>
-      <div className="total">
-        <span>Tổng tiền</span>
-        <span className="total-price">{converPrice(totalPriceMemo)}</span>
-      </div>
-    </OrderSummary>
-  )
-
-  // 🧩 Component địa chỉ giao hàng
-  // Determine default address for user (prefers addresses array default, otherwise fallback to user.address)
+  // 🧩 Xác định địa chỉ mặc định
   const defaultAddress = useMemo(() => {
-    // prefer locally-fetched addresses (keeps UI responsive after changes)
     const localDefault = (addresses || []).find(a => a.isDefault)
     if (localDefault) return localDefault
 
-    // fallback to any addresses on user from redux
     const defaultAddr = (user?.addresses || []).find(a => a.isDefault)
     if (defaultAddr) return defaultAddr
 
-    // final fallback - legacy single address fields
     if (user?.address || user?.city || user?.phone || user?.name) {
       return {
         _id: 'personal-info',
@@ -353,10 +599,9 @@ const OrderPage = () => {
     return null
   }, [user, addresses])
 
+  // 🧩 Component địa chỉ giao hàng
   const DeliveryAddressComponent = () => {
     const display = selectedAddress || defaultAddress
-
-    // Kiểm tra xem có phải là thông tin cá nhân không
     const isPersonalInfo = display?._id === 'personal-info' || display?.isPersonalInfo;
 
     return (
@@ -390,7 +635,31 @@ const OrderPage = () => {
     )
   }
 
-  // 🧩 Render sản phẩm cho cả mobile và desktop
+  // 🧩 Component tóm tắt đơn hàng
+  const OrderSummaryComponent = () => (
+    <OrderSummary>
+      <div className="summary-header">Tóm tắt đơn hàng</div>
+      <div className="summary-item">
+        <span>Tạm tính</span>
+        <span>{converPrice(priceMemo)}</span>
+      </div>
+      <div className="summary-item">
+        <span>Giảm giá</span>
+        <span className="discount">-{converPrice(priceDiscountMemo)}</span>
+      </div>
+      <div className="summary-item">
+        <span>Phí giao hàng</span>
+        <span>{converPrice(deliveryPriceMemo)}</span>
+      </div>
+      <div className="divider"></div>
+      <div className="total">
+        <span>Tổng tiền</span>
+        <span className="total-price">{converPrice(totalPriceMemo)}</span>
+      </div>
+    </OrderSummary>
+  )
+
+  // 🧩 Render sản phẩm
   const renderProductList = () => (
     <>
       <WrapperStyleHeader>
@@ -398,9 +667,11 @@ const OrderPage = () => {
           <Checkbox
             onChange={handleOnchangeCheckAll}
             checked={listChecked?.length === order?.orderItems?.length}
+            disabled={isValidatingCart}
           />
           <span style={{ marginLeft: '8px', fontWeight: '500' }}>
             Tất cả ({order?.orderItems?.length} sản phẩm)
+            {isValidatingCart && <span style={{ marginLeft: '8px', color: '#1890ff' }}>(Đang kiểm tra...)</span>}
           </span>
         </span>
         {screens.md && (
@@ -412,179 +683,216 @@ const OrderPage = () => {
             <DeleteOutlined
               style={{ cursor: 'pointer', color: '#ff4d4f' }}
               onClick={handleRemoveAllOrder}
+              disabled={listChecked.length === 0}
             />
           </div>
         )}
       </WrapperStyleHeader>
 
       <WrapperListOrder>
-        {order?.orderItems?.map((orderItem) => (
-          screens.md ? (
-            // 🖥️ Desktop View
-            <WrapperItemOrder key={orderItem?.product} checked={listChecked.includes(orderItem?.product)}>
-              <div style={{ width: '390px', display: 'flex', alignItems: 'center', gap: 12 }}>
-                <Checkbox
-                  onChange={onChange}
-                  value={orderItem?.product}
-                  checked={listChecked.includes(orderItem?.product)}
-                />
-                <img
-                  src={orderItem?.image}
-                  style={{
-                    width: '80px',
-                    height: '80px',
-                    objectFit: 'cover',
-                    borderRadius: '8px'
-                  }}
-                  alt={orderItem?.name}
-                />
-                <div
-                  style={{
-                    width: 240,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    fontSize: '14px',
-                    fontWeight: '500'
-                  }}
-                >
-                  {orderItem?.name}
-                </div>
-              </div>
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <span style={{
-                    textDecoration: orderItem?.discount ? 'line-through' : 'none',
-                    color: '#888',
-                    fontSize: '14px'
-                  }}>
-                    {converPrice(orderItem?.price)}
-                  </span>
-                  {orderItem?.discount > 0 && (
-                    <span style={{
-                      color: 'rgb(255, 66, 78)',
-                      fontWeight: 500,
-                      fontSize: '13px',
-                      background: 'rgba(255, 66, 78, 0.1)',
-                      padding: '2px 6px',
-                      borderRadius: '4px',
-                      marginTop: '4px'
-                    }}>
-                      -{orderItem?.discount}%
-                    </span>
-                  )}
-                </div>
-
-                <WrapperCountOrder>
-                  <button onClick={() => handleChangeCount('decrease', orderItem?.product)}>
-                    <MinusOutlined style={{ fontSize: '12px' }} />
-                  </button>
-                  <WrapperInputNumber value={orderItem?.amount} readOnly />
-                  <button onClick={() => handleChangeCount('increase', orderItem?.product)}>
-                    <PlusOutlined style={{ fontSize: '12px' }} />
-                  </button>
-                </WrapperCountOrder>
-
-                <span style={{
-                  color: 'rgb(255, 66, 78)',
-                  fontWeight: 600,
-                  fontSize: '15px'
-                }}>
-                  {converPrice(
-                    orderItem?.price *
-                    (1 - (orderItem?.discount || 0) / 100) *
-                    orderItem?.amount
-                  )}
-                </span>
-
-                <DeleteOutlined
-                  style={{ cursor: 'pointer', color: '#ff4d4f' }}
-                  onClick={() => handleDeleteOrder(orderItem?.product)}
-                />
-              </div>
-            </WrapperItemOrder>
-          ) : (
-            // 📱 Mobile View
-            <MobileProductCard key={orderItem?.product} checked={listChecked.includes(orderItem?.product)}>
-              <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
-                <Checkbox
-                  onChange={onChange}
-                  value={orderItem?.product}
-                  checked={listChecked.includes(orderItem?.product)}
-                />
-                <img
-                  src={orderItem?.image}
-                  style={{
-                    width: '80px',
-                    height: '80px',
-                    objectFit: 'cover',
-                    borderRadius: '8px'
-                  }}
-                  alt={orderItem?.name}
-                />
-                <MobileProductInfo>
-                  <div style={{
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    marginBottom: '4px',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden'
-                  }}>
+        {order?.orderItems?.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+            Giỏ hàng của bạn đang trống
+          </div>
+        ) : (
+          order?.orderItems?.map((orderItem) => (
+            screens.md ? (
+              // Desktop View
+              <WrapperItemOrder key={orderItem?.product} checked={listChecked.includes(orderItem?.product)}>
+                <div style={{ width: '390px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <Checkbox
+                    onChange={onChange}
+                    value={orderItem?.product}
+                    checked={listChecked.includes(orderItem?.product)}
+                    disabled={isValidatingCart}
+                  />
+                  <img
+                    src={orderItem?.image}
+                    style={{
+                      width: '80px',
+                      height: '80px',
+                      objectFit: 'cover',
+                      borderRadius: '8px'
+                    }}
+                    alt={orderItem?.name}
+                    onError={(e) => {
+                      e.target.src = 'https://via.placeholder.com/80x80?text=No+Image';
+                    }}
+                  />
+                  <div
+                    style={{
+                      width: 240,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      fontSize: '14px',
+                      fontWeight: '500'
+                    }}
+                    title={orderItem?.name}
+                  >
                     {orderItem?.name}
                   </div>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '4px' }}>
+                </div>
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     <span style={{
-                      color: 'rgb(255, 66, 78)',
-                      fontWeight: '600',
+                      textDecoration: orderItem?.discount ? 'line-through' : 'none',
+                      color: '#888',
                       fontSize: '14px'
                     }}>
-                      {converPrice(orderItem?.price * (1 - (orderItem?.discount || 0) / 100))}
+                      {converPrice(orderItem?.price)}
                     </span>
                     {orderItem?.discount > 0 && (
                       <span style={{
-                        textDecoration: 'line-through',
-                        color: '#999',
-                        fontSize: '12px'
+                        color: 'rgb(255, 66, 78)',
+                        fontWeight: 500,
+                        fontSize: '13px',
+                        background: 'rgba(255, 66, 78, 0.1)',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        marginTop: '4px'
                       }}>
-                        {converPrice(orderItem?.price)}
+                        -{orderItem?.discount}%
                       </span>
                     )}
                   </div>
-                  {orderItem?.discount > 0 && (
-                    <span style={{
-                      color: 'rgb(255, 66, 78)',
-                      fontSize: '12px',
-                      background: 'rgba(255, 66, 78, 0.1)',
-                      padding: '2px 6px',
-                      borderRadius: '4px'
+
+                  <WrapperCountOrder>
+                    <button
+                      onClick={() => handleChangeCount('decrease', orderItem?.product)}
+                      disabled={isValidatingCart || orderItem?.amount <= 1}
+                    >
+                      <MinusOutlined style={{ fontSize: '12px' }} />
+                    </button>
+                    <WrapperInputNumber value={orderItem?.amount} readOnly />
+                    <button
+                      onClick={() => handleChangeCount('increase', orderItem?.product)}
+                      disabled={isValidatingCart || orderItem?.amount >= (orderItem?.countInStock || 999)}
+                    >
+                      <PlusOutlined style={{ fontSize: '12px' }} />
+                    </button>
+                  </WrapperCountOrder>
+
+                  <span style={{
+                    color: 'rgb(255, 66, 78)',
+                    fontWeight: 600,
+                    fontSize: '15px'
+                  }}>
+                    {converPrice(
+                      orderItem?.price *
+                      (1 - (orderItem?.discount || 0) / 100) *
+                      orderItem?.amount
+                    )}
+                  </span>
+
+                  <DeleteOutlined
+                    style={{
+                      cursor: isValidatingCart ? 'not-allowed' : 'pointer',
+                      color: isValidatingCart ? '#ccc' : '#ff4d4f',
+                      opacity: isValidatingCart ? 0.5 : 1
+                    }}
+                    onClick={() => !isValidatingCart && handleDeleteOrder(orderItem?.product)}
+                  />
+                </div>
+              </WrapperItemOrder>
+            ) : (
+              // Mobile View
+              <MobileProductCard key={orderItem?.product} checked={listChecked.includes(orderItem?.product)}>
+                <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+                  <Checkbox
+                    onChange={onChange}
+                    value={orderItem?.product}
+                    checked={listChecked.includes(orderItem?.product)}
+                    disabled={isValidatingCart}
+                  />
+                  <img
+                    src={orderItem?.image}
+                    style={{
+                      width: '80px',
+                      height: '80px',
+                      objectFit: 'cover',
+                      borderRadius: '8px'
+                    }}
+                    alt={orderItem?.name}
+                    onError={(e) => {
+                      e.target.src = 'https://via.placeholder.com/80x80?text=No+Image';
+                    }}
+                  />
+                  <MobileProductInfo>
+                    <div style={{
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      marginBottom: '4px',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden'
                     }}>
-                      -{orderItem?.discount}%
-                    </span>
-                  )}
-                </MobileProductInfo>
-              </div>
+                      {orderItem?.name}
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '4px' }}>
+                      <span style={{
+                        color: 'rgb(255, 66, 78)',
+                        fontWeight: '600',
+                        fontSize: '14px'
+                      }}>
+                        {converPrice(orderItem?.price * (1 - (orderItem?.discount || 0) / 100))}
+                      </span>
+                      {orderItem?.discount > 0 && (
+                        <span style={{
+                          textDecoration: 'line-through',
+                          color: '#999',
+                          fontSize: '12px'
+                        }}>
+                          {converPrice(orderItem?.price)}
+                        </span>
+                      )}
+                    </div>
+                    {orderItem?.discount > 0 && (
+                      <span style={{
+                        color: 'rgb(255, 66, 78)',
+                        fontSize: '12px',
+                        background: 'rgba(255, 66, 78, 0.1)',
+                        padding: '2px 6px',
+                        borderRadius: '4px'
+                      }}>
+                        -{orderItem?.discount}%
+                      </span>
+                    )}
+                  </MobileProductInfo>
+                </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <WrapperCountOrder>
-                  <button onClick={() => handleChangeCount('decrease', orderItem?.product)}>
-                    <MinusOutlined style={{ fontSize: '12px' }} />
-                  </button>
-                  <WrapperInputNumber value={orderItem?.amount} readOnly />
-                  <button onClick={() => handleChangeCount('increase', orderItem?.product)}>
-                    <PlusOutlined style={{ fontSize: '12px' }} />
-                  </button>
-                </WrapperCountOrder>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <WrapperCountOrder>
+                    <button
+                      onClick={() => handleChangeCount('decrease', orderItem?.product)}
+                      disabled={isValidatingCart || orderItem?.amount <= 1}
+                    >
+                      <MinusOutlined style={{ fontSize: '12px' }} />
+                    </button>
+                    <WrapperInputNumber value={orderItem?.amount} readOnly />
+                    <button
+                      onClick={() => handleChangeCount('increase', orderItem?.product)}
+                      disabled={isValidatingCart || orderItem?.amount >= (orderItem?.countInStock || 999)}
+                    >
+                      <PlusOutlined style={{ fontSize: '12px' }} />
+                    </button>
+                  </WrapperCountOrder>
 
-                <DeleteOutlined
-                  style={{ cursor: 'pointer', color: '#ff4d4f', fontSize: '18px' }}
-                  onClick={() => handleDeleteOrder(orderItem?.product)}
-                />
-              </div>
-            </MobileProductCard>
-          )
-        ))}
+                  <DeleteOutlined
+                    style={{
+                      cursor: isValidatingCart ? 'not-allowed' : 'pointer',
+                      color: isValidatingCart ? '#ccc' : '#ff4d4f',
+                      fontSize: '18px',
+                      opacity: isValidatingCart ? 0.5 : 1
+                    }}
+                    onClick={() => !isValidatingCart && handleDeleteOrder(orderItem?.product)}
+                  />
+                </div>
+              </MobileProductCard>
+            )
+          ))
+        )}
       </WrapperListOrder>
     </>
   )
@@ -605,7 +913,7 @@ const OrderPage = () => {
           Giỏ hàng
         </h3>
 
-        {/* 🚚 Step Component - CHỈ HIỂN THỊ 1 LẦN DUY NHẤT */}
+        {/* 🚚 Step Component */}
         <WrapperStyleHeaderDilivery>
           <Step items={itemsDelivery} current={getCurrentStep()} />
         </WrapperStyleHeaderDilivery>
@@ -625,16 +933,34 @@ const OrderPage = () => {
           <WrapperRight>
             <DeliveryAddressComponent />
             <OrderSummaryComponent />
-            <ActionButton onClick={handleAddCard}>
-              {screens.xs ? `Mua hàng (${converPrice(totalPriceMemo)})` : 'Mua hàng'}
+            <ActionButton
+              onClick={handleAddCard}
+              disabled={isValidatingCart || listChecked.length === 0}
+              style={{
+                opacity: (isValidatingCart || listChecked.length === 0) ? 0.6 : 1,
+                cursor: (isValidatingCart || listChecked.length === 0) ? 'not-allowed' : 'pointer'
+              }}
+            >
+              {isValidatingCart ? 'Đang kiểm tra...' :
+                screens.xs ? `Mua hàng (${converPrice(totalPriceMemo)})` : 'Mua hàng'}
             </ActionButton>
+
+            {/* Nút kiểm tra lại giỏ hàng */}
+            {order?.orderItems?.length > 0 && (
+              <Button
+                type="link"
+                onClick={validateAndSyncCart}
+                loading={isValidatingCart}
+                style={{ width: '100%', marginTop: '10px' }}
+              >
+                Kiểm tra lại giỏ hàng
+              </Button>
+            )}
           </WrapperRight>
         </div>
       </div>
 
-      {/* Address selector modal */}
-
-      {/* ADDRESS SELECTOR MODAL */}
+      {/* MODAL CHỌN ĐỊA CHỈ */}
       <ModalComponent
         title="Chọn địa chỉ giao hàng"
         open={isAddressSelectorOpen}
@@ -698,7 +1024,6 @@ const OrderPage = () => {
                         const newAddrs = await fetchAddresses()
                         const updated = (newAddrs || []).find(a => a.isDefault)
                         setSelectedAddress(updated || null)
-                        // refresh global user details
                         const details = await UserService.getDetailsUser(user.id, user.access_token)
                         dispatch(updateUser({ ...details.data, id: details.data._id, access_token: user.access_token }))
                       } catch (err) {
@@ -708,7 +1033,6 @@ const OrderPage = () => {
                     }}>Đặt mặc định</Button>
                   )}
                   <Button onClick={() => {
-                    // open edit modal
                     setEditingAddress(addr)
                     setAddrName2(addr.name || '')
                     setAddrPhone2(addr.phone || '')
@@ -723,7 +1047,6 @@ const OrderPage = () => {
                       await UserService.deleteAddress(user.id, addr._id, user.access_token)
                       message.success('Xóa địa chỉ thành công')
                       const newAddrs = await fetchAddresses()
-                      // if deleted address was selected, clear or set to default
                       if (selectedAddress && selectedAddress._id === addr._id) {
                         const def = (newAddrs || []).find(a => a.isDefault)
                         setSelectedAddress(def || null)
@@ -742,7 +1065,7 @@ const OrderPage = () => {
         </div>
       </ModalComponent>
 
-      {/* ADDRESS EDIT MODAL */}
+      {/* MODAL SỬA/THÊM ĐỊA CHỈ */}
       <ModalComponent
         title={editingAddress ? 'Sửa địa chỉ' : 'Thêm địa chỉ'}
         open={isAddressEditOpen}

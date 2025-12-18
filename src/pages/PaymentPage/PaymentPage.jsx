@@ -46,8 +46,10 @@ const PaymentPage = () => {
   const location = useLocation();
   const screens = useBreakpoint();
 
+  // Lấy thông tin từ location.state (được truyền từ OrderPage)
   const passedOrders = location?.state?.orders || [];
   const orderItems = passedOrders.length ? passedOrders : order.orderItemsSelected;
+  const selectedAddress = location?.state?.address || null; // Địa chỉ đã chọn từ OrderPage
 
   const [isOpenModalUpdateInfo, setIsOpenModalUpdateInfo] = useState(false);
   const [stateUserDetails, setStateUserDetails] = useState({
@@ -56,11 +58,6 @@ const PaymentPage = () => {
     address: '',
     city: ''
   });
-
-  // Address selection state
-  const [showAddressSelector, setShowAddressSelector] = useState(false);
-  const [addresses, setAddresses] = useState([]);
-  const [selectedAddress, setSelectedAddress] = useState(null);
 
   const [paymentMethod, setPaymentMethod] = useState('COD'); // Mặc định là COD
   const [delivery, setDelivery] = useState('FAST');
@@ -104,37 +101,6 @@ const PaymentPage = () => {
     }
   }, [paymentMethod, resetStripeAndState]);
 
-  // Determine default address for user (prefers addresses array default, otherwise fallback to user.address)
-  const defaultAddress = useMemo(() => {
-    const defaultAddr = (user?.addresses || []).find(a => a.isDefault)
-    if (defaultAddr) return defaultAddr
-    if (user?.address || user?.city || user?.phone || user?.name) {
-      return { name: user?.name, phone: user?.phone, address: user?.address, city: user?.city }
-    }
-    return null
-  }, [user])
-
-  // Fetch addresses when opening selector or on mount
-  const fetchAddresses = async () => {
-    if (!user?.id) return
-    try {
-      const res = await UserService.getAddresses(user.id, user.access_token)
-      if (res?.data) setAddresses(res.data)
-    } catch (err) {
-      console.log('❌ Lỗi fetch addresses', err)
-    }
-  }
-
-  // Set selectedAddress from location state or default
-  useEffect(() => {
-    if (location?.state?.address) {
-      setSelectedAddress(location.state.address)
-    } else {
-      const def = (user?.addresses || []).find(a => a.isDefault)
-      if (def) setSelectedAddress(def)
-    }
-  }, [location, user])
-
   // Kiểm tra tính hợp lệ của đơn hàng
   useEffect(() => {
     const checkOrderValidity = () => {
@@ -145,12 +111,11 @@ const PaymentPage = () => {
         return false;
       }
 
-      // require selectedAddress or fallback
-      const currentAddr = selectedAddress || (user && ((user.address && user.city && user.phone && user.name) ? { name: user.name, address: user.address, city: user.city, phone: user.phone } : null))
-
-      if (!user?.access_token || !currentAddr?.name || !currentAddr?.address || !currentAddr?.phone || !currentAddr?.city || !user?.id) {
-        message.warning('Vui lòng cập nhật đầy đủ thông tin giao hàng!');
+      // Kiểm tra địa chỉ đã chọn
+      if (!selectedAddress || !selectedAddress.name || !selectedAddress.address || !selectedAddress.phone || !selectedAddress.city) {
+        message.warning('Vui lòng quay lại giỏ hàng và chọn địa chỉ giao hàng!');
         setIsValidOrder(false);
+        setTimeout(() => navigate('/order', { replace: true }), 2000);
         return false;
       }
 
@@ -166,26 +131,7 @@ const PaymentPage = () => {
     };
 
     checkOrderValidity();
-  }, [orderItems, user, selectedAddress, hasOrdered, navigate]);
-
-  // Load user details khi mở modal
-  useEffect(() => {
-    if (isOpenModalUpdateInfo) {
-      const current = selectedAddress || defaultAddress || user
-      setStateUserDetails({
-        name: current?.name || user?.data?.name || user?.name || '',
-        phone: current?.phone || user?.data?.phone || user?.phone || '',
-        address: current?.address || user?.data?.address || user?.address || '',
-        city: current?.city || user?.data?.city || user?.city || '',
-      });
-    }
-  }, [isOpenModalUpdateInfo, user, defaultAddress, selectedAddress]);
-
-  useEffect(() => {
-    if (isOpenModalUpdateInfo) {
-      form.setFieldsValue(stateUserDetails);
-    }
-  }, [form, stateUserDetails, isOpenModalUpdateInfo]);
+  }, [orderItems, selectedAddress, hasOrdered, navigate]);
 
   // Tính toán giá
   const priceMemo = useMemo(() => {
@@ -217,36 +163,61 @@ const PaymentPage = () => {
     [priceDiscountMemo, priceMemo]
   );
 
-  // Update thông tin user
-  const handleUpdateInfoUser = () => {
-    const { name, address, city, phone } = stateUserDetails;
-    if (name && address && city && phone) {
-      mutationUpdate.mutate(
-        {
-          id: user?.id || user?.data?._id,
-          token: user?.access_token,
-          ...stateUserDetails
-        },
-        {
-          onSuccess: (response) => {
-            dispatch(updateUser(response?.data));
-            setIsOpenModalUpdateInfo(false);
-            setIsValidOrder(true);
-            message.success('Cập nhật thông tin thành công!');
-          },
-          onError: () => {
-            message.error('Cập nhật thông tin thất bại!');
-          }
-        }
+  // Component hiển thị thông tin giao hàng
+  const DeliveryAddressComponent = () => {
+    if (!selectedAddress) {
+      return (
+        <PaymentInfoCard>
+          <div className="info-header">
+            <span className="title">Địa chỉ giao hàng</span>
+          </div>
+          <div className="info-content">
+            <div className="info-item" style={{ color: '#ff4d4f' }}>
+              Chưa có địa chỉ giao hàng. Vui lòng quay lại giỏ hàng để chọn địa chỉ.
+            </div>
+          </div>
+        </PaymentInfoCard>
       );
-    } else {
-      message.warning('Vui lòng điền đầy đủ thông tin!');
     }
-  };
 
-  const handleCancelUpdate = () => {
-    form.resetFields();
-    setIsOpenModalUpdateInfo(false);
+    const isPersonalInfo = selectedAddress?._id === 'personal-info' || selectedAddress?.isPersonalInfo;
+
+    return (
+      <PaymentInfoCard>
+        <div className="info-header">
+          <span className="title">Địa chỉ giao hàng</span>
+          <span
+            className="change-btn"
+            style={{ cursor: 'pointer' }}
+            onClick={() => navigate('/order')}
+          >
+            Thay đổi
+          </span>
+        </div>
+        <div className="info-content">
+          <div className="info-item">
+            <strong>{selectedAddress?.name || 'Chưa có'}</strong> | {selectedAddress?.phone || 'Chưa có'}
+            {isPersonalInfo && (
+              <span style={{
+                marginLeft: '8px',
+                fontSize: '12px',
+                color: '#52c41a',
+                backgroundColor: '#f6ffed',
+                padding: '2px 6px',
+                borderRadius: '4px'
+              }}>
+                Thông tin cá nhân
+              </span>
+            )}
+          </div>
+          <div className="info-item">
+            {selectedAddress?.address && selectedAddress?.city
+              ? `${selectedAddress.address}, ${selectedAddress.city}`
+              : 'Chưa có địa chỉ'}
+          </div>
+        </div>
+      </PaymentInfoCard>
+    );
   };
 
   // Hàm xử lý order thành công
@@ -275,11 +246,12 @@ const PaymentPage = () => {
         payment: paymentMethodUsed,
         orders: orderItems,
         totalPriceMemo,
-        orderId: orderData._id || createdOrderId
+        orderId: orderData._id || createdOrderId,
+        address: selectedAddress // Truyền địa chỉ sang trang thành công
       },
       replace: true
     });
-  }, [orderItems, dispatch, navigate, delivery, totalPriceMemo, createdOrderId, resetStripeAndState]);
+  }, [orderItems, dispatch, navigate, delivery, totalPriceMemo, createdOrderId, resetStripeAndState, selectedAddress]);
 
   // Tạo đơn hàng
   const handleCreateOrder = async (paymentMethodType = paymentMethod) => {
@@ -290,21 +262,19 @@ const PaymentPage = () => {
     // Xác định trạng thái thanh toán dựa trên paymentMethod
     const isPaid = paymentMethodType === 'Stripe';
 
-    const currentAddr = selectedAddress || (user && ((user.address && user.city && user.phone && user.name) ? { name: user.name, phone: user.phone, address: user.address, city: user.city } : null))
-
     const payload = {
       orderItems,
-      fullName: currentAddr?.name || user?.name,
+      fullName: selectedAddress?.name || user?.name,
       email: user?.email,
-      phone: currentAddr?.phone || user?.phone,
+      phone: selectedAddress?.phone || user?.phone,
       paymentMethod: paymentMethodType, // 'COD' hoặc 'Stripe'
       itemsPrice: priceMemo,
       shippingPrice: deliveryPriceMemo,
       totalPrice: totalPriceMemo,
       delivery,
       user: user?.id,
-      address: currentAddr?.address || user?.address,
-      city: currentAddr?.city || user?.city,
+      address: selectedAddress?.address || user?.address,
+      city: selectedAddress?.city || user?.city,
       country: 'Việt Nam',
       taxPrice: 0,
       discount: totalDiscountPercent || 0,
@@ -362,11 +332,15 @@ const PaymentPage = () => {
       return;
     }
 
-    // require a chosen address (either selectedAddress or fallback info on user)
-    const currentAddr = selectedAddress || (user && ((user.address && user.city && user.phone && user.name) ? { name: user.name, address: user.address, city: user.city, phone: user.phone } : null))
+    // Kiểm tra địa chỉ đã chọn
+    if (!selectedAddress) {
+      message.warning('Vui lòng quay lại giỏ hàng và chọn địa chỉ giao hàng!');
+      navigate('/order');
+      return;
+    }
 
-    if (!user?.access_token || !orderItems?.length || !currentAddr || !user?.id) {
-      message.warning('Vui lòng kiểm tra thông tin giao hàng và sản phẩm!');
+    if (!user?.access_token || !orderItems?.length || !user?.id) {
+      message.warning('Vui lòng kiểm tra thông tin đơn hàng!');
       return;
     }
 
@@ -437,55 +411,6 @@ const PaymentPage = () => {
     }
   }, [isSuccess, newOrder, hasOrdered, isValidOrder, handleOrderSuccess, paymentMethod]);
 
-  const handleOnchangeDetails = (e) => {
-    setStateUserDetails({
-      ...stateUserDetails,
-      [e.target.name]: e.target.value
-    });
-  };
-
-  // Address selector markup
-  const AddressSelectorModal = () => (
-    <Modal
-      title="Chọn địa chỉ giao hàng"
-      visible={showAddressSelector}
-      onCancel={() => setShowAddressSelector(false)}
-      footer={null}
-    >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        {addresses && addresses.length ? (
-          addresses.map(addr => (
-            <div key={addr._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', border: selectedAddress && selectedAddress._id === addr._id ? '2px solid #1890ff' : '1px solid #f0f0f0', borderRadius: '6px' }}>
-              <div>
-                <div style={{ fontWeight: '600' }}>{addr.name} {addr.isDefault && <span style={{ color: '#1890ff', marginLeft: '8px' }}>(Mặc định)</span>}</div>
-                <div style={{ color: '#666' }}>{addr.phone} • {addr.address}, {addr.city}</div>
-              </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <Button type="primary" onClick={() => { setSelectedAddress(addr); setShowAddressSelector(false); setStateUserDetails({ name: addr.name, phone: addr.phone, address: addr.address, city: addr.city }); }}>
-                  Chọn
-                </Button>
-                {!addr.isDefault && <Button onClick={async () => { await UserService.setDefaultAddress(user.id, addr._id, user.access_token); await fetchAddresses(); }}>
-                  Đặt mặc định
-                </Button>}
-                <Button onClick={() => { setSelectedAddress(addr); setShowAddressSelector(false); setIsOpenModalUpdateInfo(true); }}>
-                  Sửa
-                </Button>
-              </div>
-            </div>
-          ))
-        ) : (
-          <div>Chưa có địa chỉ nào</div>
-        )}
-        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-          <Button onClick={() => { setShowAddressSelector(false); setIsOpenModalUpdateInfo(true); fetchAddresses(); }}>
-            Thêm / Sửa địa chỉ
-          </Button>
-          <Button onClick={() => setShowAddressSelector(false)}>Đóng</Button>
-        </div>
-      </div>
-    </Modal>
-  )
-
   // Xử lý khi chuyển đổi phương thức thanh toán
   const handlePaymentChange = (newPaymentMethod) => {
     // Reset trạng thái Stripe khi chuyển sang COD
@@ -538,25 +463,15 @@ const PaymentPage = () => {
           <PaymentContent>
             {/* LEFT SIDE */}
             <PaymentLeft>
-              {/* Thông tin giao hàng */}
+              {/* Thông tin giao hàng - CHỈ HIỂN THỊ TỪ ORDERPAGE */}
               <PaymentSection>
                 <h3>🚚 Thông tin giao hàng</h3>
-                <PaymentInfoCard onClick={() => { setShowAddressSelector(true); fetchAddresses() }}>
-                  <div className="info-header">
-                    <span className="title">Địa chỉ nhận hàng</span>
-                    <span className="change-btn">Thay đổi</span>
-                  </div>
-                  <div className="info-content">
-                    <div className="info-item">
-                      <strong>{(selectedAddress || defaultAddress)?.name || 'Chưa có thông tin'}</strong>
-                      <span>|</span>
-                      <span>{(selectedAddress || defaultAddress)?.phone || 'Chưa có số điện thoại'}</span>
-                    </div>
-                    <div className="info-item">
-                      {(selectedAddress || defaultAddress)?.address && (selectedAddress || defaultAddress)?.city ? `${(selectedAddress || defaultAddress).address}, ${(selectedAddress || defaultAddress).city}` : 'Chưa có địa chỉ'}
-                    </div>
-                  </div>
-                </PaymentInfoCard>
+                <DeliveryAddressComponent />
+                <div style={{ marginTop: '10px', fontSize: '14px', color: '#666' }}>
+                  <span style={{ cursor: 'pointer', color: '#1890ff' }} onClick={() => navigate('/order')}>
+                    ← Quay lại giỏ hàng để thay đổi địa chỉ
+                  </span>
+                </div>
               </PaymentSection>
 
               {/* Phương thức giao hàng */}
@@ -728,72 +643,6 @@ const PaymentPage = () => {
           </PaymentContent>
         </PaymentWrapper>
       </Loading>
-
-      {/* Address selector modal */}
-      <AddressSelectorModal />
-
-      {/* Modal cập nhật thông tin */}
-      <ModalComponent
-        title="Cập nhật thông tin giao hàng"
-        open={isOpenModalUpdateInfo}
-        onCancel={handleCancelUpdate}
-        onOk={handleUpdateInfoUser}
-        width={screens.xs ? '90%' : 600}
-      >
-        <Loading isLoading={isLoading}>
-          <Form
-            form={form}
-            labelCol={{ span: screens.xs ? 4 : 6 }}
-            wrapperCol={{ span: screens.xs ? 20 : 18 }}
-            initialValues={stateUserDetails}
-          >
-            <Form.Item
-              label="Họ tên"
-              name="name"
-              rules={[{ required: true, message: 'Vui lòng nhập họ tên!' }]}
-            >
-              <InputComponent
-                value={stateUserDetails.name}
-                onChange={handleOnchangeDetails}
-                name="name"
-              />
-            </Form.Item>
-            <Form.Item
-              label="Số điện thoại"
-              name="phone"
-              rules={[{ required: true, message: 'Vui lòng nhập số điện thoại!' }]}
-            >
-              <InputComponent
-                value={stateUserDetails.phone}
-                onChange={handleOnchangeDetails}
-                name="phone"
-              />
-            </Form.Item>
-            <Form.Item
-              label="Địa chỉ"
-              name="address"
-              rules={[{ required: true, message: 'Vui lòng nhập địa chỉ!' }]}
-            >
-              <InputComponent
-                value={stateUserDetails.address}
-                onChange={handleOnchangeDetails}
-                name="address"
-              />
-            </Form.Item>
-            <Form.Item
-              label="Thành phố"
-              name="city"
-              rules={[{ required: true, message: 'Vui lòng nhập thành phố!' }]}
-            >
-              <InputComponent
-                value={stateUserDetails.city}
-                onChange={handleOnchangeDetails}
-                name="city"
-              />
-            </Form.Item>
-          </Form>
-        </Loading>
-      </ModalComponent>
     </PaymentContainer>
   );
 };
