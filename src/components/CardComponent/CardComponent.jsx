@@ -12,12 +12,17 @@ import { StarFilled } from '@ant-design/icons'
 import logo from '../../assets/images/logo.jpg'
 import { useNavigate } from 'react-router-dom';
 import { converPrice } from './../../utils';
+import { message } from 'antd';
 
 const CardComponent = (props) => {
     const { countInStock, description, image, name, price, rating, type, discount, selled, id } = props
     const navigate = useNavigate();
 
     const handleDetailsProduct = (id) => {
+        if (!id) {
+            message.error('Sản phẩm không khả dụng');
+            return;
+        }
         navigate(`/product-details/${id}`)
     }
 

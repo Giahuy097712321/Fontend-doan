@@ -1,7 +1,7 @@
 // src/components/ProductDetailsComponent/ProductDetailsComponent.jsx
 import { Col, Row, Rate, Tabs } from 'antd';
 import React, { useState } from 'react';
-import { MessageOutlined ,MinusOutlined, PlusOutlined, SafetyCertificateOutlined, TruckOutlined, SyncOutlined, FileTextOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { MessageOutlined, MinusOutlined, PlusOutlined, SafetyCertificateOutlined, TruckOutlined, SyncOutlined, FileTextOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import * as ProductService from '../../services/ProductService';
 import Loading from './../LoadingComponent/Loading';
 import ButtonComponent from './../ButtonComponent/ButtonComponent';
@@ -139,22 +139,22 @@ const ProductDetailsComponent = ({ idProduct }) => {
                 </WrapperDescription>
             ),
         },
-     // Trong ProductDetailsComponent.jsx, sửa tab comment:
-{
-    key: 'comments',
-    label: (
-        <span>
-            <MessageOutlined />
-            Đánh giá ({productDetails?.ratingSummary?.totalRatings || 0})
-        </span>
-    ),
-    children: (
-        <CustomCommentComponent
-            productId={idProduct}
-            productName={productDetails?.name}
-        />
-    ),
-}
+        // Trong ProductDetailsComponent.jsx, sửa tab comment:
+        {
+            key: 'comments',
+            label: (
+                <span>
+                    <MessageOutlined />
+                    Đánh giá ({productDetails?.ratingSummary?.totalRatings || 0})
+                </span>
+            ),
+            children: (
+                <CustomCommentComponent
+                    productId={idProduct}
+                    productName={productDetails?.name}
+                />
+            ),
+        }
     ];
 
     return (

@@ -96,7 +96,14 @@ const CustomCommentComponent = ({ productId }) => {
             }
         } catch (error) {
             console.error('Lỗi khi tải bình luận:', error);
-            message.error('Lỗi khi tải bình luận');
+            if (error?.response?.status === 404) {
+                // Product not found or removed
+                message.warning('Sản phẩm không tồn tại hoặc đã bị gỡ bỏ.');
+                setComments([]);
+                setPagination(prev => ({ ...prev, current: 1, total: 0 }));
+            } else {
+                message.error('Lỗi khi tải bình luận');
+            }
         } finally {
             setLoading(false);
         }

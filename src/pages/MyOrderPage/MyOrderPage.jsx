@@ -1,6 +1,8 @@
+// src/pages/MyOrderPage/MyOrderPage.jsx
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import * as OrderService from './../../services/OrderService';
+import * as ProductService from './../../services/ProductService';
 import { useSelector } from 'react-redux';
 import Loading from './../../components/LoadingComponent/Loading';
 import {
@@ -19,7 +21,7 @@ import ButtonComponent from './../../components/ButtonComponent/ButtonComponent'
 import { useNavigate } from 'react-router-dom';
 import { useMutationHooks } from './../../hooks/useMutationHook';
 import * as message from '../../components/Message/Message';
-import { Card, Tag, Divider, Empty, Alert, Modal, Tooltip, Steps } from 'antd';
+import { Card, Tag, Divider, Empty, Alert, Modal, Tooltip, Steps, Button } from 'antd';
 import {
     ShoppingOutlined,
     CheckCircleOutlined,
@@ -28,6 +30,7 @@ import {
     EyeOutlined,
     DeleteOutlined,
     ExclamationCircleOutlined,
+    InfoCircleOutlined,
     TruckOutlined,
     SyncOutlined,
     RedoOutlined,
@@ -45,6 +48,164 @@ const MyOrderPage = () => {
     const navigate = useNavigate();
     const [reorderLoading, setReorderLoading] = useState(null);
     const [cancelModal, setCancelModal] = useState({ visible: false, order: null });
+
+    // Cache để lưu thông tin sản phẩm đã bị xóa
+    const [deletedProductIds, setDeletedProductIds] = useState([]);
+    // Cache để lưu thông tin sản phẩm còn tồn tại
+    const [productCache, setProductCache] = useState({});
+    // Để lưu trạng thái loading khi kiểm tra sản phẩm
+    const [checkingProducts, setCheckingProducts] = useState({});
+
+    // Normalize a product identifier
+    const normalizeProductId = (raw) => {
+        if (!raw && raw !== 0) return null;
+        if (typeof raw === 'string') return raw;
+        if (typeof raw === 'number') return String(raw);
+        if (typeof raw === 'object') {
+            // Kiểm tra nếu object có property _id hoặc id
+            return raw?._id || raw?.id || null;
+        }
+        return null;
+    };
+
+    // Hàm kiểm tra sản phẩm có tồn tại không
+    const checkProductExists = async (productId) => {
+        if (!productId) return false;
+
+        // Kiểm tra trong cache trước
+        if (deletedProductIds.includes(productId)) {
+            return false;
+        }
+
+        if (productCache[productId]) {
+            return true;
+        }
+
+        // Đánh dấu đang kiểm tra
+        setCheckingProducts(prev => ({ ...prev, [productId]: true }));
+
+        try {
+            const res = await ProductService.getDetailsProduct(productId);
+
+            // Nếu API trả về thành công và có data
+            if (res?.data) {
+                setProductCache(prev => ({ ...prev, [productId]: res.data }));
+                return true;
+            }
+            return false;
+        } catch (err) {
+            // Nếu lỗi 404, 500 hoặc sản phẩm không tồn tại
+            if (err?.response?.status === 404 || err?.response?.status === 500 || err?.response?.data?.message?.includes('not found')) {
+                setDeletedProductIds(prev => [...prev, productId]);
+                return false;
+            }
+            return false;
+        } finally {
+            setCheckingProducts(prev => {
+                const newState = { ...prev };
+                delete newState[productId];
+                return newState;
+            });
+        }
+    };
+
+    // Hàm xử lý click vào sản phẩm (xem nhanh)
+    const handleOpenProductModal = async (rawProduct) => {
+        const id = normalizeProductId(rawProduct);
+        if (!id) {
+            message.error('Sản phẩm không hợp lệ');
+            return;
+        }
+
+        // Kiểm tra trong cache trước
+        if (deletedProductIds.includes(id)) {
+            showDeletedProductModal();
+            return;
+        }
+
+        // Kiểm tra sản phẩm có tồn tại không
+        const exists = await checkProductExists(id);
+        if (exists) {
+            // Nếu sản phẩm tồn tại, điều hướng đến trang chi tiết
+            navigate(`/product-details/${id}`);
+        } else {
+            showDeletedProductModal();
+        }
+    };
+
+    // Hàm hiển thị modal sản phẩm đã xóa
+    const showDeletedProductModal = () => {
+        Modal.warning({
+            title: 'Sản phẩm không khả dụng',
+            content: (
+                <div style={{ padding: '20px 0' }}>
+                    <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+                        <ExclamationCircleOutlined style={{ fontSize: '48px', color: '#faad14' }} />
+                    </div>
+                    <h3 style={{ color: '#faad14', textAlign: 'center' }}>Sản phẩm đã ngừng bán</h3>
+                    <p style={{ textAlign: 'center', color: '#666' }}>
+                        Sản phẩm này đã bị gỡ bỏ hoặc ngừng kinh doanh.
+                    </p>
+                    <p style={{ textAlign: 'center', color: '#999', fontSize: '14px' }}>
+                        Bạn vẫn có thể xem thông tin đơn hàng nhưng không thể xem chi tiết sản phẩm.
+                    </p>
+                </div>
+            ),
+            okText: 'Đã hiểu',
+            okType: 'default'
+        });
+    };
+
+    // Hàm xử lý click nút đánh giá
+    const handleRateClick = async (rawProduct) => {
+        const id = normalizeProductId(rawProduct);
+        if (!id) {
+            message.error('Sản phẩm không hợp lệ');
+            return;
+        }
+
+        // Kiểm tra trong cache trước
+        if (deletedProductIds.includes(id)) {
+            showCannotRateModal();
+            return;
+        }
+
+        // Kiểm tra sản phẩm có tồn tại không
+        const exists = await checkProductExists(id);
+        if (exists) {
+            // Điều hướng đến trang chi tiết sản phẩm với tab comments
+            navigate(`/product-details/${id}`, {
+                state: {
+                    activeTab: 'comments'
+                }
+            });
+        } else {
+            showCannotRateModal();
+        }
+    };
+
+    // Hàm hiển thị modal không thể đánh giá
+    const showCannotRateModal = () => {
+        Modal.warning({
+            title: 'Không thể đánh giá',
+            content: (
+                <div style={{ padding: '20px 0' }}>
+                    <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+                        <CloseCircleOutlined style={{ fontSize: '48px', color: '#ff4d4f' }} />
+                    </div>
+                    <h3 style={{ color: '#ff4d4f', textAlign: 'center' }}>Sản phẩm đã ngừng bán</h3>
+                    <p style={{ textAlign: 'center', color: '#666' }}>
+                        Không thể đánh giá sản phẩm đã bị gỡ bỏ.
+                    </p>
+                    <p style={{ textAlign: 'center', color: '#999', fontSize: '14px' }}>
+                        Sản phẩm này đã không còn được bán trên hệ thống.
+                    </p>
+                </div>
+            ),
+            okText: 'Đã hiểu',
+            okType: 'default'
+        });
+    };
 
     // Fetch orders
     const fetchMyOrder = async () => {
@@ -79,7 +240,7 @@ const MyOrderPage = () => {
         return res;
     });
 
-    // Mutation mua lại đơn hàng - ĐÃ SỬA: Tự động kích hoạt lại đơn hàng
+    // Mutation mua lại đơn hàng
     const mutationReorder = useMutationHooks(async ({ id, token }) => {
         const res = await OrderService.reorder(id, token);
         return res;
@@ -98,7 +259,7 @@ const MyOrderPage = () => {
         return 'pending';
     };
 
-    // Hàm lấy trạng thái thanh toán - FIX: COD luôn là 'unpaid'
+    // Hàm lấy trạng thái thanh toán
     const getPaymentStatus = (order) => {
         if (!order) return 'unpaid';
 
@@ -106,7 +267,6 @@ const MyOrderPage = () => {
         if (order.paymentStatus) return order.paymentStatus;
 
         // Tương thích với trạng thái cũ
-        // COD luôn là chưa thanh toán, online là đã thanh toán
         return order.isPaid ? 'paid' : 'unpaid';
     };
 
@@ -208,7 +368,7 @@ const MyOrderPage = () => {
         );
     };
 
-    // Xử lý mua lại đơn hàng - ĐÃ SỬA: Tự động kích hoạt lại đơn hàng
+    // Xử lý mua lại đơn hàng
     const handleReorder = (order) => {
         setReorderLoading(order._id);
         mutationReorder.mutate(
@@ -277,43 +437,138 @@ const MyOrderPage = () => {
         );
     };
 
-    const renderProduct = (items) => {
+    const renderProduct = (items, order) => {
         if (!items || !Array.isArray(items)) return null;
 
-        return items?.map((item) => {
+        return items?.map((item, index) => {
             const quantity = item?.amount || item?.quantity || 1;
             const price = item?.price || item?.product?.price || 0;
             const discount = item?.discount || 0;
             const priceAfterDiscount = price - (price * discount) / 100;
             const totalItemPrice = priceAfterDiscount * quantity;
 
+            // Lấy thông tin sản phẩm từ item
+            const productInfo = item?.product || item || {};
+            const productId = normalizeProductId(productInfo);
+
+            // Kiểm tra xem sản phẩm có trong cache deleted không
+            const isDeleted = productId ? deletedProductIds.includes(productId) : false;
+            const isLoadingProduct = productId ? checkingProducts[productId] : false;
+
+            // Lấy tên sản phẩm từ nhiều nguồn có thể
+            const productName = item?.name || productInfo?.name || `Sản phẩm ${index + 1}`;
+            // Lấy hình ảnh từ nhiều nguồn có thể
+            const productImage = item?.image || productInfo?.image || '/default-product.jpg';
+
             return (
-                <WrapperHeaderItem key={item?.product?._id || item?._id || item?.name}>
-                    <img
-                        src={item?.image || '/default-product.jpg'}
-                        alt={item?.name}
+                <WrapperHeaderItem key={`${productId || item?._id || index}-${order?._id}`}>
+                    <div
                         style={{
-                            width: '80px',
-                            height: '80px',
-                            objectFit: 'cover',
-                            borderRadius: '8px',
-                            border: '1px solid #f0f0f0',
+                            display: 'flex',
+                            gap: 12,
+                            alignItems: 'center',
+                            cursor: isDeleted ? 'not-allowed' : 'pointer',
+                            opacity: isDeleted ? 0.6 : 1
                         }}
-                    />
-                    <WrapperProductInfo>
-                        <div className="product-name">{item?.name}</div>
-                        <div className="product-details">
-                            Số lượng: {quantity}
-                            {discount > 0 && (
-                                <span className="discount">-{discount}%</span>
-                            )}
-                        </div>
-                    </WrapperProductInfo>
+                        onClick={() => !isDeleted && handleOpenProductModal(productInfo)}
+                    >
+                        <img
+                            src={productImage}
+                            alt={productName}
+                            style={{
+                                width: '80px',
+                                height: '80px',
+                                objectFit: 'cover',
+                                borderRadius: '8px',
+                                border: '1px solid #f0f0f0',
+                            }}
+                            onError={(e) => {
+                                e.target.src = 'https://via.placeholder.com/80x80?text=Image+Not+Available';
+                            }}
+                        />
+                        <WrapperProductInfo>
+                            <div className="product-name" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                {productName}
+                                {isDeleted && (
+                                    <Tag color="red" style={{ fontSize: '12px', margin: 0 }}>
+                                        <CloseCircleOutlined /> Đã xóa
+                                    </Tag>
+                                )}
+                                {isLoadingProduct && (
+                                    <Tag color="blue" style={{ fontSize: '12px', margin: 0 }}>
+                                        <SyncOutlined spin /> Đang kiểm tra...
+                                    </Tag>
+                                )}
+                            </div>
+                            <div className="product-details">
+                                Số lượng: {quantity}
+                                {discount > 0 && (
+                                    <span className="discount">-{discount}%</span>
+                                )}
+                            </div>
+                        </WrapperProductInfo>
+                    </div>
+
                     <WrapperPriceInfo>
                         {discount > 0 && (
                             <div className="original-price">{convertPrice(price)}</div>
                         )}
                         <div className="final-price">{convertPrice(totalItemPrice)}</div>
+
+                        {/* Nếu đơn hàng đã giao thì hiển thị nút Đánh giá cạnh mỗi sản phẩm */}
+                        {getDeliveryStatus(order) === 'delivered' && (
+                            <div style={{ marginTop: 8 }}>
+                                <Button
+                                    type="link"
+                                    disabled={isDeleted || isLoadingProduct}
+                                    loading={isLoadingProduct}
+                                    onClick={(e) => {
+                                        e.stopPropagation(); // Ngăn chặn sự kiện click từ parent
+                                        handleRateClick(productInfo);
+                                    }}
+                                    style={{
+                                        padding: '0',
+                                        fontSize: '14px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '4px'
+                                    }}
+                                >
+                                    {isDeleted ? (
+                                        <>
+                                            <CloseCircleOutlined />
+                                            Không thể đánh giá
+                                        </>
+                                    ) : isLoadingProduct ? (
+                                        <>
+                                            <SyncOutlined spin />
+                                            Đang kiểm tra...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <CheckOutlined />
+                                            Đánh giá sản phẩm
+                                        </>
+                                    )}
+                                </Button>
+                            </div>
+                        )}
+
+                        {/* Nếu sản phẩm đã bị xóa/ngừng bán thì hiển thị thông báo */}
+                        {isDeleted && (
+                            <div style={{ marginTop: 8 }}>
+                                <div style={{
+                                    fontSize: '12px',
+                                    color: '#ff4d4f',
+                                    backgroundColor: '#fff2f0',
+                                    padding: '4px 8px',
+                                    borderRadius: '4px',
+                                    border: '1px solid #ffccc7'
+                                }}>
+                                    Sản phẩm đã ngừng bán
+                                </div>
+                            </div>
+                        )}
                     </WrapperPriceInfo>
                 </WrapperHeaderItem>
             );
@@ -327,6 +582,18 @@ const MyOrderPage = () => {
                     <div className="page-header">
                         <ShoppingOutlined style={{ fontSize: '24px', color: '#1890ff', marginRight: '12px' }} />
                         <h1>Đơn hàng của tôi</h1>
+                        <div style={{
+                            marginTop: '8px',
+                            fontSize: '14px',
+                            color: '#666',
+                            backgroundColor: '#f6ffed',
+                            padding: '8px 12px',
+                            borderRadius: '4px',
+                            border: '1px solid #b7eb8f'
+                        }}>
+                            <InfoCircleOutlined style={{ marginRight: '8px' }} />
+                            Các sản phẩm đã ngừng bán vẫn được hiển thị trong đơn hàng để đảm bảo tính minh bạch.
+                        </div>
                     </div>
 
                     {Array.isArray(data) && data.length > 0 ? (
@@ -380,7 +647,7 @@ const MyOrderPage = () => {
 
                                         {/* Danh sách sản phẩm */}
                                         <div className="products-list">
-                                            {renderProduct(order?.orderItems)}
+                                            {renderProduct(order?.orderItems, order)}
                                         </div>
 
                                         <Divider style={{ margin: '16px 0' }} />
