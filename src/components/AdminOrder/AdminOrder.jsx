@@ -40,9 +40,7 @@ const DELIVERY_STATUSES = [
 // Cấu hình các trạng thái thanh toán (mới)
 const PAYMENT_STATUSES = [
     { value: 'unpaid', label: 'Chưa thanh toán', color: '#ff4d4f', icon: <CloseCircleOutlined /> },
-    { value: 'paid', label: 'Đã thanh toán', color: '#52c41a', icon: <CheckCircleOutlined /> },
-    { value: 'partial', label: 'Thanh toán một phần', color: '#faad14', icon: <ExclamationCircleOutlined /> },
-    { value: 'refunded', label: 'Đã hoàn tiền', color: '#1890ff', icon: <ShoppingOutlined /> }
+    { value: 'paid', label: 'Đã thanh toán', color: '#52c41a', icon: <CheckCircleOutlined /> }
 ];
 
 const AdminOrder = () => {
@@ -295,18 +293,18 @@ const AdminOrder = () => {
     }, [orders]);
 
     const paymentStats = useMemo(() => {
-        if (!orders?.data) return { unpaid: 0, paid: 0, partial: 0, refunded: 0 };
+        if (!orders?.data) return { unpaid: 0, paid: 0 };
 
         const stats = {
             unpaid: 0,
-            paid: 0,
-            partial: 0,
-            refunded: 0
+            paid: 0
         };
 
         orders.data.forEach(order => {
             const status = getPaymentStatus(order);
-            stats[status] = (stats[status] || 0) + 1;
+            if (status === 'unpaid' || status === 'paid') {
+                stats[status] = (stats[status] || 0) + 1;
+            }
         });
 
         return stats;
@@ -618,7 +616,7 @@ const AdminOrder = () => {
                                         <ExclamationCircleOutlined /> Lưu ý:
                                         <ul style={{ margin: '5px 0 0 15px', padding: 0 }}>
                                             <li>Khi đánh dấu "Đã giao hàng", trạng thái thanh toán sẽ tự động chuyển thành "Đã thanh toán"</li>
-                                            <li>Hủy đơn hàng đã thanh toán online sẽ chuyển trạng thái thanh toán thành "Đã hoàn tiền"</li>
+                                            <li>Hủy đơn hàng đã thanh toán online sẽ thực hiện hoàn tiền cho khách</li>
                                             <li>Đơn hàng COD có thể hủy khi chưa thanh toán</li>
                                         </ul>
                                     </small>
