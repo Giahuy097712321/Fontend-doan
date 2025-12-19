@@ -1,8 +1,9 @@
 // AdminOrder.jsx
 import { Button, Form, Select, Input, Empty, Tag, Alert, Tooltip, Modal } from 'antd';
-import { EditOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, SyncOutlined, TruckOutlined, ExclamationCircleOutlined, ShoppingOutlined } from '@ant-design/icons';
-import React, { useState, useMemo, useEffect } from 'react';
+import { EditOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, SyncOutlined, TruckOutlined, ExclamationCircleOutlined, ShoppingOutlined, SearchOutlined } from '@ant-design/icons';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import TableComponent from '../TableComponent/TableComponent';
+import InputComponent from '../InputComponent/InputComponent';
 import * as OrderService from '../../services/OrderService';
 import { useMutationHooks } from '../../hooks/useMutationHook';
 import Loading from '../LoadingComponent/Loading';
@@ -50,6 +51,67 @@ const AdminOrder = () => {
     const [confirmAction, setConfirmAction] = useState('');
     const [form] = Form.useForm();
     const user = useSelector((state) => state?.user);
+
+    // Search state and helpers for table columns (search by order code)
+    const [searchText, setSearchText] = useState('');
+    const [searchedColumn, setSearchedColumn] = useState('');
+    const searchInput = useRef(null);
+
+    const handleSearch = (selectedKeys, confirm, dataIndex) => {
+        confirm();
+        setSearchText(selectedKeys[0]);
+        setSearchedColumn(dataIndex);
+    };
+
+    const handleReset = (clearFilters) => {
+        clearFilters();
+        setSearchText('');
+    };
+
+    const getColumnSearchProps = (dataIndex) => ({
+        filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters, close }) => (
+            <div style={{ padding: 8 }} onKeyDown={(e) => e.stopPropagation()}>
+                <InputComponent
+                    ref={searchInput}
+                    placeholder={`Search ${dataIndex}`}
+                    value={selectedKeys[0]}
+                    onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
+                    onPressEnter={() => handleSearch(selectedKeys, confirm, dataIndex)}
+                    style={{ marginBottom: 8, display: 'block' }}
+                />
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <Button
+                        type="primary"
+                        onClick={() => handleSearch(selectedKeys, confirm, dataIndex)}
+                        size="small"
+                        style={{ width: '90px' }}
+                    >
+                        Search
+                    </Button>
+                    <Button
+                        onClick={() => clearFilters && handleReset(clearFilters)}
+                        size="small"
+                        style={{ width: '90px' }}
+                    >
+                        Reset
+                    </Button>
+                </div>
+            </div>
+        ),
+        filterIcon: (filtered) => <SearchOutlined style={{ color: filtered ? '#1677ff' : undefined }} />,
+        onFilter: (value, record) => {
+            const recordValue = record[dataIndex];
+            if (!recordValue) return false;
+            return recordValue.toString().toLowerCase().includes(value.toLowerCase());
+        },
+        filterDropdownProps: {
+            onOpenChange(open) {
+                if (open) {
+                    setTimeout(() => searchInput.current?.select(), 100);
+                }
+            },
+        },
+    });
 
     const mutationUpdate = useMutationHooks(({ id, token, deliveryStatus, paymentStatus, isPaid }) =>
         OrderService.updateOrder(id, { deliveryStatus, paymentStatus, isPaid }, token)
@@ -339,6 +401,7 @@ const AdminOrder = () => {
             title: 'Mã đơn',
             dataIndex: 'orderCode',
             width: 100,
+            ...getColumnSearchProps('orderCode'),
             render: (code) => <strong style={{ color: '#1890ff' }}>{code}</strong>
         },
         {
