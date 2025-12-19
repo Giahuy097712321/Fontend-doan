@@ -32,6 +32,7 @@ const ProfilePage = () => {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [address, setAddress] = useState('')
+  const [city, setCity] = useState('')
   const [avatar, setAvatar] = useState('')
   const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false)
   const [isForgotPasswordModalOpen, setIsForgotPasswordModalOpen] = useState(false)
@@ -61,6 +62,7 @@ const ProfilePage = () => {
     setName(user?.name || '')
     setPhone(user?.phone || '')
     setAddress(user?.address || '')
+    setCity(user?.city || '')
     setAvatar(user?.avatar || '')
   }, [user])
 
@@ -194,6 +196,7 @@ const ProfilePage = () => {
       name,
       phone,
       address,
+      city,
       avatar,
       access_token: user?.access_token,
     })
@@ -447,6 +450,42 @@ const ProfilePage = () => {
                       id="address"
                       value={address}
                       onChange={setAddress}
+                      size="large"
+                    />
+                    <ButtonComponent
+                      onClick={handleUpdate}
+                      size={40}
+                      styleButton={{
+                        height: '40px',
+                        minWidth: '100px',
+                        background: '#52c41a',
+                        border: 'none',
+                        borderRadius: '6px'
+                      }}
+                      styleTextButton={{
+                        color: '#fff',
+                        fontWeight: '600'
+                      }}
+                      textButton={'Cập nhật'}
+                    />
+                  </div>
+                </WrapperInput>
+
+                {/* City */}
+                <WrapperInput>
+                  <WrapperLabel htmlFor="city">
+                    <EnvironmentOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
+                    Thành phố
+                  </WrapperLabel>
+                  <div style={{ flex: 1, display: 'flex', gap: '12px' }}>
+                    <InputForm
+                      style={{
+                        width: '100%',
+                        borderRadius: '6px'
+                      }}
+                      id="city"
+                      value={city}
+                      onChange={setCity}
                       size="large"
                     />
                     <ButtonComponent
