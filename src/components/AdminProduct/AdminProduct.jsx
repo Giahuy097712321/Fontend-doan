@@ -1,5 +1,5 @@
 // AdminProduct.jsx
-import { Button, Form, Select, Input, Row, Col, Card, Statistic, Empty, Modal } from 'antd';
+import { Button, Form, Select, Input, Row, Col, Card, Statistic, Empty, Modal, InputNumber } from 'antd';
 import { PlusOutlined, DeleteOutlined, EditOutlined, SearchOutlined, ShoppingOutlined, StarOutlined, StockOutlined, AppstoreOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
@@ -591,13 +591,13 @@ const AdminProduct = () => {
       width: 120
     },
     {
-      title: 'Đánh giá',
+      title: 'Mức độ tiết kiệm điện',
       dataIndex: 'rating',
       sorter: (a, b) => a.rating - b.rating,
       width: 100,
       render: (rating) => (
         <span style={{ color: rating >= 4 ? '#52c41a' : rating >= 3 ? '#faad14' : '#ff4d4f' }}>
-          {rating} ⭐
+          {rating} ⚡
         </span>
       )
     },
@@ -750,8 +750,8 @@ const AdminProduct = () => {
           <InfoNumber>{totalStock}</InfoNumber>
         </InfoCard>
         <InfoCard>
-          <InfoLabel>Đánh giá TB</InfoLabel>
-          <InfoNumber>{averageRating} ⭐</InfoNumber>
+          <InfoLabel>Mức độ tiết kiệm TB</InfoLabel>
+          <InfoNumber>{averageRating} ⚡</InfoNumber>
         </InfoCard>
         <InfoCard>
           <InfoLabel>Loại sản phẩm</InfoLabel>
@@ -809,14 +809,36 @@ const AdminProduct = () => {
       {/* Header với nút thêm sản phẩm */}
       <div style={{ margin: '20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h3 style={{ margin: 0, color: '#333', fontSize: '18px', fontWeight: 'bold' }}>Danh sách sản phẩm</h3>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => setIsModalOpen(true)}
-          size="large"
-        >
-          Thêm sản phẩm
-        </Button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <Button
+            danger
+            icon={<DeleteOutlined />}
+            onClick={() => {
+              if (!selectedRowKeys || selectedRowKeys.length === 0) return;
+              Modal.confirm({
+                title: `Xóa ${selectedRowKeys.length} sản phẩm đã chọn`,
+                content: `Bạn có chắc chắn muốn xóa ${selectedRowKeys.length} sản phẩm đã chọn?`,
+                okText: 'Xóa',
+                cancelText: 'Hủy',
+                okButtonProps: { danger: true },
+                onOk: () => handleDeleteManyProducts(selectedRowKeys)
+              });
+            }}
+            disabled={selectedRowKeys.length === 0}
+            loading={isCheckingOrders || isLoadingDeletedMany}
+            size="large"
+          >
+            Xóa đã chọn
+          </Button>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setIsModalOpen(true)}
+            size="large"
+          >
+            Thêm sản phẩm
+          </Button>
+        </div>
       </div>
 
       {/* Table */}
@@ -882,8 +904,27 @@ const AdminProduct = () => {
                 rows={3}
               />
             </Form.Item>
-            <Form.Item label="Đánh giá" name="rating" rules={[{ required: true, message: 'Nhập rating!' }]}>
-              <InputComponent value={stateProduct.rating} onChange={handleOnchange} name="rating" />
+            <Form.Item label="Mức độ tiết kiệm điện" name="rating" rules={[
+              { required: true, message: 'Nhập mức độ tiết kiệm!' },
+              {
+                validator: (_, value) => {
+                  const num = Number(value);
+                  if (value === undefined || value === null || value === '') {
+                    return Promise.reject('Nhập mức độ tiết kiệm!');
+                  }
+                  if (Number.isNaN(num)) return Promise.reject('Phải là số');
+                  if (num < 0 || num > 5) return Promise.reject('Nhập giá trị từ 0 đến 5');
+                  return Promise.resolve();
+                }
+              }
+            ]}>
+              <InputNumber
+                min={0}
+                max={5}
+                value={stateProduct.rating === '' ? null : stateProduct.rating}
+                onChange={(value) => setStateProduct({ ...stateProduct, rating: value })}
+                style={{ width: '100%' }}
+              />
             </Form.Item>
             <Form.Item label="Giảm giá" name="discount" rules={[{ required: true, message: 'Nhập discount!' }]}>
               <InputComponent value={stateProduct.discount} onChange={handleOnchange} name="discount" />
@@ -959,8 +1000,27 @@ const AdminProduct = () => {
                 rows={3}
               />
             </Form.Item>
-            <Form.Item label="Đánh giá" name="rating" rules={[{ required: true, message: 'Nhập rating!' }]}>
-              <InputComponent value={stateProductDetails.rating} onChange={handleOnchangeDetails} name="rating" />
+            <Form.Item label="Mức độ tiết kiệm điện" name="rating" rules={[
+              { required: true, message: 'Nhập mức độ tiết kiệm!' },
+              {
+                validator: (_, value) => {
+                  const num = Number(value);
+                  if (value === undefined || value === null || value === '') {
+                    return Promise.reject('Nhập mức độ tiết kiệm!');
+                  }
+                  if (Number.isNaN(num)) return Promise.reject('Phải là số');
+                  if (num < 0 || num > 5) return Promise.reject('Nhập giá trị từ 0 đến 5');
+                  return Promise.resolve();
+                }
+              }
+            ]}>
+              <InputNumber
+                min={0}
+                max={5}
+                value={stateProductDetails.rating === '' ? null : stateProductDetails.rating}
+                onChange={(value) => setStateProductDetails({ ...stateProductDetails, rating: value })}
+                style={{ width: '100%' }}
+              />
             </Form.Item>
             <Form.Item label="Giảm giá" name="discount" rules={[{ required: true, message: 'Nhập discount!' }]}>
               <InputComponent value={stateProductDetails.discount} onChange={handleOnchangeDetails} name="discount" />
