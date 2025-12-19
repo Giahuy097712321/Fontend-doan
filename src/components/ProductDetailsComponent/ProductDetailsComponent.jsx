@@ -28,7 +28,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { converPrice } from './../../utils';
+import { converPrice, computeEfficiency } from './../../utils';
 import { message } from 'antd';
 import CustomCommentComponent from '../CustomCommentComponent/CustomCommentComponent';
 
@@ -57,6 +57,9 @@ const ProductDetailsComponent = ({ idProduct }) => {
         queryFn: fetchGetDetailsProduct,
         enabled: !!idProduct,
     });
+
+    // Độ tiết kiệm điện (tính ở frontend)
+    const productEfficiency = computeEfficiency(productDetails);
 
     const handleChangeCount = (type) => {
         if (type === 'increase') {
@@ -174,13 +177,15 @@ const ProductDetailsComponent = ({ idProduct }) => {
                     <WrapperProductInfo>
                         <WrapperStyleNameProduct>{productDetails?.name}</WrapperStyleNameProduct>
 
-                        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px', gap: '12px' }}>
                             <Rate
                                 allowHalf
-                                value={productDetails?.rating}
-                                style={{ color: '#ffd700', fontSize: '16px', marginRight: '8px' }}
+                                value={productEfficiency}
+                                style={{ color: '#ffd700', fontSize: '16px' }}
+                                disabled
                             />
-                            <WrapperStyleTextSell> | Đã bán {productDetails?.selled || '10,000'}+</WrapperStyleTextSell>
+                            <div style={{ color: '#333', fontWeight: 500 }}>{`Độ tiết kiệm điện: ${productEfficiency}/5`}</div>
+                            <WrapperStyleTextSell> | Đã bán {(productDetails?.selled ?? 0).toLocaleString()}</WrapperStyleTextSell>
                         </div>
 
                         <WrapperPriceProduct>

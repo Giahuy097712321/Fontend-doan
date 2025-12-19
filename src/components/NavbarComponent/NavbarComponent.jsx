@@ -2,7 +2,7 @@ import { Rate } from 'antd'
 import React from 'react'
 import { WrapperContent } from './style'
 
-const NavBarComponent = ({ selectedRating, onRatingChange }) => {
+const NavBarComponent = ({ selectedEfficiency, onEfficiencyChange }) => {
 
     const ratingOptions = [5, 4, 3, 2, 1]
 
@@ -19,11 +19,11 @@ const NavBarComponent = ({ selectedRating, onRatingChange }) => {
                             cursor: 'pointer',
                             padding: '8px 12px',
                             borderRadius: '6px',
-                            backgroundColor: selectedRating === option ? '#e6f7ff' : 'transparent',
-                            border: selectedRating === option ? '1px solid #1890ff' : '1px solid transparent',
+                            backgroundColor: selectedEfficiency === option ? '#e6f7ff' : 'transparent',
+                            border: selectedEfficiency === option ? '1px solid #1890ff' : '1px solid transparent',
                             transition: 'all 0.3s ease'
                         }}
-                        onClick={() => onRatingChange(option)}
+                        onClick={() => onEfficiencyChange(option)}
                     >
                         <Rate
                             style={{ fontSize: '14px' }}
@@ -32,10 +32,10 @@ const NavBarComponent = ({ selectedRating, onRatingChange }) => {
                         />
                         <span style={{
                             fontSize: '13px',
-                            color: selectedRating === option ? '#1890ff' : '#666',
-                            fontWeight: selectedRating === option ? '600' : '400'
+                            color: selectedEfficiency === option ? '#1890ff' : '#666',
+                            fontWeight: selectedEfficiency === option ? '600' : '400'
                         }}>
-                            {`Từ ${option} sao`}
+                            {`Từ ${option}/5`}
                         </span>
                     </div>
                 ))}

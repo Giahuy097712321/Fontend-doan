@@ -32,7 +32,7 @@ const TypeProductPage = () => {
   const [loading, setLoading] = useState(false)
   const [sortOption, setSortOption] = useState('default')
   const [priceRange, setPriceRange] = useState([0, 50000000])
-  const [selectedRating, setSelectedRating] = useState(0)
+  const [selectedEfficiency, setSelectedEfficiency] = useState(0)
   const [typeProducts, setTypeProducts] = useState([])
 
   const fetchAllTypeProduct = async () => {
@@ -72,10 +72,10 @@ const TypeProductPage = () => {
       product.price >= priceRange[0] && product.price <= priceRange[1]
     )
 
-    // Filter theo rating
-    if (selectedRating > 0) {
+    // Filter theo độ tiết kiệm điện
+    if (selectedEfficiency > 0) {
       result = result.filter(product =>
-        product.rating >= selectedRating
+        (product.efficiency || product.rating || 0) >= selectedEfficiency
       )
     }
 
@@ -94,7 +94,7 @@ const TypeProductPage = () => {
         result.sort((a, b) => b.name.localeCompare(a.name))
         break
       case 'rating':
-        result.sort((a, b) => b.rating - a.rating)
+        result.sort((a, b) => (b.efficiency || b.rating || 0) - (a.efficiency || a.rating || 0))
         break
       default:
         // Mặc định giữ nguyên thứ tự
@@ -102,13 +102,13 @@ const TypeProductPage = () => {
     }
 
     setFilteredProducts(result)
-  }, [allProducts, searchDebounce, priceRange, selectedRating, sortOption])
+  }, [allProducts, searchDebounce, priceRange, selectedEfficiency, sortOption])
 
   // Reset tất cả filter
   const resetFilters = () => {
     setSortOption('default')
     setPriceRange([0, 50000000])
-    setSelectedRating(0)
+    setSelectedEfficiency(0)
     setFilteredProducts(allProducts)
   }
 
@@ -131,8 +131,8 @@ const TypeProductPage = () => {
     setPriceRange(value)
   }
 
-  const handleRatingChange = (rating) => {
-    setSelectedRating(rating === selectedRating ? 0 : rating)
+  const handleEfficiencyChange = (rating) => {
+    setSelectedEfficiency(rating === selectedEfficiency ? 0 : rating)
   }
 
   return (
@@ -188,7 +188,7 @@ const TypeProductPage = () => {
                 <Option value="price_desc">Giá cao đến thấp</Option>
                 <Option value="name_asc">Tên A-Z</Option>
                 <Option value="name_desc">Tên Z-A</Option>
-                <Option value="rating">Đánh giá cao nhất</Option>
+                <Option value="rating">Tiết kiệm điện cao nhất</Option>
               </Select>
             </div>
           </WrapperHeader>
@@ -269,11 +269,11 @@ const TypeProductPage = () => {
                     marginBottom: '12px',
                     color: '#333'
                   }}>
-                    Đánh giá
+                    Độ tiết kiệm điện
                   </h4>
                   <NavBarComponent
-                    selectedRating={selectedRating}
-                    onRatingChange={handleRatingChange}
+                    selectedEfficiency={selectedEfficiency}
+                    onEfficiencyChange={handleEfficiencyChange}
                   />
                 </FilterSection>
               </WrapperNavbar>
@@ -295,7 +295,7 @@ const TypeProductPage = () => {
                         image={product.image}
                         name={product.name}
                         price={product.price}
-                        rating={product.rating}
+                        efficiency={product.efficiency ?? product.rating}
                         type={product.type}
                         selled={product.selled}
                         discount={product.discount}

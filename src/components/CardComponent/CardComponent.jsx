@@ -15,7 +15,7 @@ import { converPrice } from './../../utils';
 import { message } from 'antd';
 
 const CardComponent = (props) => {
-    const { countInStock, description, image, name, price, rating, type, discount, selled, id } = props
+    const { countInStock, description, image, name, price, efficiency, type, discount, selled, id } = props
     const navigate = useNavigate();
 
     const handleDetailsProduct = (id) => {
@@ -42,10 +42,10 @@ const CardComponent = (props) => {
             <StyleNameProduct>{name}</StyleNameProduct>
 
             <WrapperReportText>
-                <span style={{ marginRight: '4px' }}>
-                    {rating} <StarFilled style={{ fontSize: '12px', color: '#FFD700' }} />
+                <span style={{ marginRight: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {efficiency ?? '—'} <StarFilled style={{ fontSize: '12px', color: '#FFD700' }} />
                 </span>
-                <WrapperStyleTextSell>| Đã bán {selled || 1000}+</WrapperStyleTextSell>
+                <WrapperStyleTextSell>| Đã bán {(selled ?? 0).toLocaleString()}</WrapperStyleTextSell>
             </WrapperReportText>
 
             <WrapperPriceText>{converPrice(price)}</WrapperPriceText>

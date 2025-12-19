@@ -34,6 +34,7 @@ import * as ProductService from '../../services/ProductService'
 import { useSelector } from 'react-redux';
 import Loading from './../../components/LoadingComponent/Loading';
 import { useDebounce } from './../../hooks/useDebounce';
+import { computeEfficiency } from '../../utils';
 import {
   CrownOutlined,
   SafetyCertificateOutlined,
@@ -67,6 +68,11 @@ const HomePage = () => {
     const sort = context?.queryKey && context?.queryKey[3]
     let res = await ProductService.getAllProduct(search, limit)
 
+    // Tính độ tiết kiệm điện cho mỗi sản phẩm trên frontend
+    if (res?.data && Array.isArray(res.data)) {
+      res.data = res.data.map(p => ({ ...p, efficiency: computeEfficiency(p) }))
+    }
+
     // Sắp xếp sản phẩm
     if (sort && res?.data) {
       switch (sort) {
@@ -77,7 +83,7 @@ const HomePage = () => {
           res.data.sort((a, b) => b.price - a.price)
           break
         case 'rating':
-          res.data.sort((a, b) => b.rating - a.rating)
+          res.data.sort((a, b) => (b.efficiency || b.rating || 0) - (a.efficiency || a.rating || 0))
           break
         case 'sold':
           res.data.sort((a, b) => b.selled - a.selled)
@@ -174,7 +180,7 @@ const HomePage = () => {
   }
 
   // Lọc sản phẩm theo tiêu chí mới - LẤY TẤT CẢ SẢN PHẨM
-  const featuredProducts = products?.data?.filter(product => product.rating === 5) || []
+  const featuredProducts = products?.data?.filter(product => (product.efficiency || product.rating) === 5) || []
   const hotDealProducts = products?.data?.filter(product => product.discount >= 15) || [] // Từ 15% trở lên
   const bestSellingProducts = products?.data?.filter(product => product.selled > 10) || [] // Bán trên 10 sản phẩm
 
@@ -278,7 +284,7 @@ const HomePage = () => {
                 image={product.image}
                 name={product.name}
                 price={product.price}
-                rating={product.rating}
+                efficiency={product.efficiency ?? product.rating}
                 type={product.type}
                 selled={product.selled}
                 discount={product.discount}
@@ -322,7 +328,7 @@ const HomePage = () => {
             <SectionTitle>Sản Phẩm</SectionTitle>
             <SectionSubtitle>
               {activeTab === 'featured'
-                ? `Những sản phẩm được đánh giá 5 sao (${featuredProducts.length} sản phẩm)`
+                ? `Những sản phẩm có độ tiết kiệm điện 5/5 (${featuredProducts.length} sản phẩm)`
                 : activeTab === 'hot'
                   ? `Sản phẩm khuyến mãi từ 15% trở lên (${hotDealProducts.length} sản phẩm)`
                   : activeTab === 'bestseller'
@@ -369,7 +375,7 @@ const HomePage = () => {
                 <option value="default">Mặc định</option>
                 <option value="price_asc">Giá thấp đến cao</option>
                 <option value="price_desc">Giá cao đến thấp</option>
-                <option value="rating">Đánh giá cao nhất</option>
+                <option value="rating">Tiết kiệm điện cao nhất</option>
                 <option value="sold">Bán chạy nhất</option>
               </SortSelect>
             </div>
@@ -384,7 +390,7 @@ const HomePage = () => {
                 image={product.image}
                 name={product.name}
                 price={product.price}
-                rating={product.rating}
+                efficiency={product.efficiency ?? product.rating}
                 type={product.type}
                 selled={product.selled}
                 discount={product.discount}

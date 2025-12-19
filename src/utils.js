@@ -46,6 +46,39 @@ export const converPrice = (price) => {
         return null
     }
 }
+
+// Tính toán "độ tiết kiệm điện" cho sản phẩm trên frontend
+export const computeEfficiency = (product) => {
+    if (!product) return 0
+    if (typeof product.efficiency === 'number') return product.efficiency
+
+    // Nếu có thông số kỹ thuật, tìm giá trị watt (W/kW) để suy ra độ tiết kiệm
+    const specs = product.specifications || {}
+    const values = Object.values(specs)
+    for (let v of values) {
+        if (!v || typeof v !== 'string') continue
+        const m = v.match(/(\d+(?:[.,]\d+)?)\s*(k?W|kw|W|watt|Watt)/i)
+        if (m) {
+            let num = parseFloat(m[1].replace(',', '.'))
+            const unit = (m[2] || '').toLowerCase()
+            if (unit.includes('kw')) num = num * 1000
+            const watt = num
+            // Đơn giản: càng ít watt => càng tiết kiệm => điểm cao
+            if (watt <= 50) return 5
+            if (watt <= 100) return 4
+            if (watt <= 200) return 3
+            if (watt <= 400) return 2
+            return 1
+        }
+    }
+
+    // Fallback: nếu có rating số (từ backend), dùng tạm làm efficiency
+    if (typeof product.rating === 'number') return Math.round(product.rating)
+
+    // Mặc định trung bình
+    return 3
+}
+
 export const initFacebookSDK = () => {
     if (window.FB) {
         window.FB.XFBML.parse(); // Sửa từ XHTML.parse() thành XFBML.parse()
