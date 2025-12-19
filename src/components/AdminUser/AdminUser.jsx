@@ -1,6 +1,6 @@
 // AdminUser.jsx
 import { Button, Form, Select, Input, Empty, Modal } from 'antd';
-import { DeleteOutlined, EditOutlined, SearchOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import { EditOutlined, SearchOutlined } from '@ant-design/icons';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
     WrapperHeader,
@@ -18,16 +18,13 @@ import {
 import TableComponent from '../TableComponent/TableComponent';
 import InputComponent from './../InputComponent/InputComponent';
 import * as UserService from '../../services/UserService';
-import * as OrderService from '../../services/OrderService';
 import { getBase64 } from '../../utils';
 import { useMutationHooks } from './../../hooks/useMutationHook';
 import Loading from './../LoadingComponent/Loading';
 import * as message from '../../components/Message/Message';
 import { useQuery } from '@tanstack/react-query';
 import DrawerComponent from './../DrawerCompoenent/DrawerComponent';
-import { useSelector, useDispatch } from 'react-redux';
-import { updateUser } from '../../redux/sildes/userSlide';
-import ModalComponent from './../ModalComponent/ModalComponent';
+import { useSelector } from 'react-redux';
 import { PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
 
 const COLORS_ADMIN = ['#0088FE', '#00C49F'];
@@ -36,7 +33,6 @@ const AdminUser = () => {
     const [rowSelected, setRowSelected] = useState('');
     const [isLoadingUpdate, setIsLoadingUpdate] = useState(false);
     const [isOpenDrawer, setIsOpenDrawer] = useState(false);
-    const [isModalOpenDelete, setIsModalOpenDelete] = useState(false);
 
     const [formUpdate] = Form.useForm();
 
@@ -45,7 +41,6 @@ const AdminUser = () => {
     const searchInput = useRef(null);
 
     const user = useSelector((state) => state?.user);
-    const dispatch = useDispatch();
 
     const [stateUserDetails, setStateUserDetails] = useState({
         name: '',
@@ -56,24 +51,11 @@ const AdminUser = () => {
         address: '',
     });
 
-    // State lưu các id user được chọn
-    const [selectedRowKeys, setSelectedRowKeys] = useState([]);
-
-    // mutation update user
-    const mutationUpdate = useMutationHooks((data) => {
-        const { id, token, ...rests } = data;
-        return UserService.updateUser(id, rests, token);
-    });
-
-    // mutation delete user
-    const mutationDeleted = useMutationHooks((data) => {
-        const { id, token } = data;
-        return UserService.deleteUser(id, token);
-    });
-
-    // mutation delete many users
-    const mutationDeletedMany = useMutationHooks(({ ids, token }) => {
-        return UserService.deleteManyUser(ids, token);
+    // mutation chỉ update quyền
+    const mutationUpdateRole = useMutationHooks((data) => {
+        const { id, token, isAdmin } = data;
+        // use existing updateUser service to update role
+        return UserService.updateUser(id, { isAdmin }, token);
     });
 
     const {
@@ -81,14 +63,7 @@ const AdminUser = () => {
         isLoading: isLoadingUpdated,
         isSuccess: isSuccessUpdated,
         isError: isErrorUpdated,
-    } = mutationUpdate;
-
-    const {
-        data: dataDeleted,
-        isLoading: isLoadingDeleted,
-        isSuccess: isSuccessDeleted,
-        isError: isErrorDeleted,
-    } = mutationDeleted;
+    } = mutationUpdateRole;
 
     // fetch all users
     const getAllUsers = async () => await UserService.getAllUser(user?.access_token);
@@ -128,47 +103,8 @@ const AdminUser = () => {
         { name: 'Người dùng thường', count: regularUsers }
     ], [adminUsers, regularUsers]);
 
-    // Hàm truyền xuống TableComponent để cập nhật selectedRowKeys
-    const onSelectChange = (newSelectedRowKeys) => {
-        // ✅ Loại bỏ ID của user đang đăng nhập VÀ admin khỏi danh sách chọn
-        const filteredKeys = newSelectedRowKeys.filter(key => {
-            const isCurrent = isCurrentUser(key);
-            const isAdmin = isAdminUser(key);
-            return !isCurrent && !isAdmin; // Không cho chọn chính mình và admin khác
-        });
-        setSelectedRowKeys(filteredKeys);
-    };
-
-    // Hàm xóa nhiều user
-    const handleDeleteManyUsers = (ids) => {
-        // ✅ Kiểm tra xem có user đang đăng nhập trong danh sách không
-        const containsCurrentUser = ids.some(id => isCurrentUser(id));
-        // ✅ Kiểm tra xem có admin trong danh sách không
-        const containsAdmin = ids.some(id => isAdminUser(id));
-
-        if (containsCurrentUser) {
-            message.error('Không thể xóa tài khoản đang đăng nhập!');
-            return;
-        }
-
-        if (containsAdmin) {
-            message.error('Không thể xóa tài khoản quản trị viên!');
-            return;
-        }
-
-        mutationDeletedMany.mutate(
-            { ids, token: user?.access_token },
-            {
-                onSettled: () => {
-                    queryUser.refetch();
-                    setSelectedRowKeys([]);
-                },
-            }
-        );
-    };
-
-    // edit user
-    const handleEditUser = async (id) => {
+    // Hàm mở drawer chỉ để phân quyền
+    const handleEditUserRole = async (id) => {
         setIsOpenDrawer(true);
         setIsLoadingUpdate(true);
         try {
@@ -183,7 +119,10 @@ const AdminUser = () => {
                     address: res.data.address || '',
                 });
                 formUpdate.setFieldsValue({
-                    ...res.data,
+                    name: res.data.name,
+                    email: res.data.email,
+                    phone: res.data.phone,
+                    address: res.data.address,
                     isAdmin: res.data.isAdmin ? 'true' : 'false'
                 });
                 setRowSelected(id);
@@ -208,19 +147,9 @@ const AdminUser = () => {
                         fontSize: '18px',
                         cursor: 'pointer'
                     }}
-                    onClick={() => handleEditUser(userId)}
-                    title="Chỉnh sửa người dùng"
+                    onClick={() => handleEditUserRole(userId)}
+                    title={isSelf ? "Chỉnh sửa tài khoản của chính mình" : "Phân quyền người dùng"}
                 />
-                {!isSelf && !isAdmin && ( // ✅ CHỈ hiển thị nút xóa nếu KHÔNG phải là mình và KHÔNG phải admin
-                    <DeleteOutlined
-                        style={{ color: 'red', fontSize: '18px', cursor: 'pointer' }}
-                        onClick={() => {
-                            setIsModalOpenDelete(true);
-                            setRowSelected(userId);
-                        }}
-                        title="Xóa người dùng"
-                    />
-                )}
                 {isSelf && (
                     <span style={{
                         fontSize: '12px',
@@ -372,67 +301,16 @@ const AdminUser = () => {
         }
     ];
 
-    // trạng thái update user
+    // trạng thái update quyền
     useEffect(() => {
         if (isSuccessUpdated && dataUpdated?.status === 'OK') {
-            message.success('Cập nhật người dùng thành công!');
-
-            if (dataUpdated?.data) {
-                setStateUserDetails(dataUpdated.data);
-                formUpdate.setFieldsValue(dataUpdated.data);
-
-                // CHỈ dispatch nếu đang cập nhật chính user đang đăng nhập
-                if (isCurrentUser(dataUpdated.data._id)) {
-                    dispatch(updateUser({
-                        ...dataUpdated.data,
-                        id: dataUpdated.data._id,
-                        access_token: user?.access_token
-                    }));
-                }
-            }
+            message.success('Cập nhật quyền người dùng thành công!');
             queryUser.refetch();
             handleCloseDrawer();
         } else if (isErrorUpdated) {
-            message.error('Cập nhật người dùng thất bại!');
+            message.error('Cập nhật quyền người dùng thất bại!');
         }
     }, [isSuccessUpdated, isErrorUpdated, dataUpdated]);
-
-    // trạng thái xóa user
-    useEffect(() => {
-        if (isSuccessDeleted && dataDeleted?.status === 'OK') {
-            message.success('Xóa người dùng thành công!');
-            handleCancelDelete();
-            queryUser.refetch();
-        } else if (isErrorDeleted) {
-            message.error('Xóa người dùng thất bại!');
-        }
-    }, [isSuccessDeleted, isErrorDeleted, dataDeleted]);
-
-    const handleCancelDelete = () => setIsModalOpenDelete(false);
-
-    const handleDeleteUser = () => {
-        const isSelf = isCurrentUser(rowSelected);
-        const isAdmin = isAdminUser(rowSelected);
-
-        // ✅ Kiểm tra nếu đang xóa chính mình
-        if (isSelf) {
-            message.error('Không thể xóa tài khoản đang đăng nhập!');
-            handleCancelDelete();
-            return;
-        }
-
-        // ✅ Kiểm tra nếu đang xóa admin
-        if (isAdmin) {
-            message.error('Không thể xóa tài khoản quản trị viên!');
-            handleCancelDelete();
-            return;
-        }
-
-        mutationDeleted.mutate(
-            { id: rowSelected, token: user?.access_token },
-            { onSettled: () => queryUser.refetch() }
-        );
-    };
 
     const handleCloseDrawer = () => {
         setIsOpenDrawer(false);
@@ -440,46 +318,21 @@ const AdminUser = () => {
         setRowSelected('');
     };
 
-    const onUpdateUser = () => {
-        mutationUpdate.mutate(
+    const onUpdateUserRole = () => {
+        // Chỉ gửi thông tin quyền admin
+        mutationUpdateRole.mutate(
             {
                 id: rowSelected,
                 token: user?.access_token,
-                ...stateUserDetails,
                 isAdmin: stateUserDetails.isAdmin
             },
             { onSettled: () => queryUser.refetch() }
         );
     };
 
-    const handleOnchangeDetails = (e) => {
-        const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
-        setStateUserDetails({ ...stateUserDetails, [e.target.name]: value });
-    };
-
     const handleSelectChange = (value) => {
         setStateUserDetails({ ...stateUserDetails, isAdmin: value === 'true' });
     };
-
-    // Xử lý upload avatar
-    const handleOnchangeAvatarDetails = async ({ fileList }) => {
-        if (fileList && fileList.length > 0) {
-            const file = fileList[0];
-            if (!file.url && !file.preview) {
-                file.preview = await getBase64(file.originFileObj);
-            }
-            setStateUserDetails({ ...stateUserDetails, avatar: file.preview });
-        }
-    };
-
-    // Hiển thị thông báo khi xóa nhiều user
-    useEffect(() => {
-        if (mutationDeletedMany.isSuccess && mutationDeletedMany.data?.status === 'OK') {
-            message.success('Xóa nhiều người dùng thành công!');
-        } else if (mutationDeletedMany.isError) {
-            message.error('Xóa nhiều người dùng thất bại!');
-        }
-    }, [mutationDeletedMany.isSuccess, mutationDeletedMany.isError, mutationDeletedMany.data]);
 
     return (
         <div>
@@ -533,18 +386,16 @@ const AdminUser = () => {
                         columns={columns}
                         isLoading={isLoadingUsers}
                         data={dataTable}
-                        handleDeleteManyProducts={handleDeleteManyUsers}
-                        rowSelectedKeys={selectedRowKeys}
-                        onSelectChange={onSelectChange}
+                        showSelection={false} // Ẩn checkbox chọn nhiều
                     />
                 ) : (
                     <Empty description="Chưa có người dùng nào" />
                 )}
             </TableWrapper>
 
-            {/* Drawer */}
+            {/* Drawer chỉ để phân quyền */}
             <DrawerComponent
-                title="Chi tiết người dùng"
+                title="Phân quyền người dùng"
                 isOpen={isOpenDrawer}
                 onClose={handleCloseDrawer}
                 width="500px"
@@ -553,116 +404,62 @@ const AdminUser = () => {
                     <Form
                         form={formUpdate}
                         layout="vertical"
-                        onFinish={onUpdateUser}
+                        onFinish={onUpdateUserRole}
                     >
-                        <Form.Item label="Tên người dùng" name="name" rules={[{ required: true, message: 'Nhập tên!' }]}>
+                        <Form.Item label="Tên người dùng" name="name">
                             <InputComponent
                                 value={stateUserDetails.name}
-                                onChange={handleOnchangeDetails}
-                                name="name"
+                                disabled={true}
+                                style={{ background: '#f5f5f5' }}
                             />
                         </Form.Item>
-                        <Form.Item label="Email" name="email" rules={[{ required: true, message: 'Nhập Email!' }]}>
+                        <Form.Item label="Email" name="email">
                             <InputComponent
                                 value={stateUserDetails.email}
-                                onChange={handleOnchangeDetails}
-                                name="email"
+                                disabled={true}
+                                style={{ background: '#f5f5f5' }}
                             />
                         </Form.Item>
-                        <Form.Item label="Số điện thoại" name="phone" rules={[{ required: true, message: 'Nhập số điện thoại!' }]}>
+                        <Form.Item label="Số điện thoại" name="phone">
                             <InputComponent
                                 value={stateUserDetails.phone}
-                                onChange={handleOnchangeDetails}
-                                name="phone"
+                                disabled={true}
+                                style={{ background: '#f5f5f5' }}
                             />
                         </Form.Item>
                         <Form.Item label="Địa chỉ" name="address">
                             <InputComponent
                                 value={stateUserDetails.address}
-                                onChange={handleOnchangeDetails}
-                                name="address"
+                                disabled={true}
+                                style={{ background: '#f5f5f5' }}
                             />
                         </Form.Item>
-                        <Form.Item label="Quyền admin" name="isAdmin">
+                        <Form.Item
+                            label="Quyền admin"
+                            name="isAdmin"
+                            rules={[{ required: true, message: 'Vui lòng chọn quyền!' }]}
+                        >
                             <Select
                                 value={stateUserDetails.isAdmin ? 'true' : 'false'}
                                 onChange={handleSelectChange}
                             >
-                                <Select.Option value="true">Có</Select.Option>
-                                <Select.Option value="false">Không</Select.Option>
+                                <Select.Option value="true">Có (Quản trị viên)</Select.Option>
+                                <Select.Option value="false">Không (Người dùng thường)</Select.Option>
                             </Select>
                         </Form.Item>
-                        <Form.Item label="Ảnh đại diện" name="avatar">
-                            <WrapperUploadFile
-                                onChange={handleOnchangeAvatarDetails}
-                                maxCount={1}
-                                showUploadList={false}
-                                beforeUpload={() => false}
-                            >
-                                <Button>Chọn ảnh</Button>
-                                {stateUserDetails?.avatar && (
-                                    <img
-                                        src={stateUserDetails?.avatar}
-                                        style={{
-                                            height: '60px',
-                                            width: '60px',
-                                            borderRadius: '50%',
-                                            objectFit: 'cover',
-                                            marginLeft: '10px'
-                                        }}
-                                        alt="avatar"
-                                    />
-                                )}
-                            </WrapperUploadFile>
-                        </Form.Item>
                         <Form.Item>
-                            <Button type="primary" htmlType="submit">
-                                Cập nhật
-                            </Button>
+                            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                                <Button onClick={handleCloseDrawer}>
+                                    Hủy
+                                </Button>
+                                <Button type="primary" htmlType="submit" loading={isLoadingUpdated}>
+                                    Cập nhật quyền
+                                </Button>
+                            </div>
                         </Form.Item>
                     </Form>
                 </Loading>
             </DrawerComponent>
-
-            {/* Modal xóa user */}
-            <ModalComponent
-                title="Xóa người dùng"
-                open={isModalOpenDelete}
-                onCancel={handleCancelDelete}
-                onOk={handleDeleteUser}
-                okText="Xóa"
-                cancelText="Hủy"
-                okButtonProps={{ danger: true, loading: isLoadingDeleted }}
-            >
-                <Loading isLoading={isLoadingDeleted}>
-                    <div style={{ textAlign: 'center', fontSize: '16px', padding: '20px 0' }}>
-                        {isCurrentUser(rowSelected) ? (
-                            <>
-                                <p style={{ color: '#ff4d4f', fontWeight: 'bold', marginBottom: '15px' }}>
-                                    ⚠️ KHÔNG THỂ XÓA TÀI KHOẢN ĐANG ĐĂNG NHẬP!
-                                </p>
-                                <p>• Bạn không thể xóa tài khoản của chính mình</p>
-                                <p>• Hãy đăng xuất hoặc dùng tài khoản admin khác để xóa</p>
-                            </>
-                        ) : isAdminUser(rowSelected) ? (
-                            <>
-                                <p style={{ color: '#ff4d4f', fontWeight: 'bold', marginBottom: '15px' }}>
-                                    ⚠️ KHÔNG THỂ XÓA TÀI KHOẢN QUẢN TRỊ VIÊN!
-                                </p>
-                                <p>• Bạn không thể xóa tài khoản quản trị viên</p>
-                                <p>• Chỉ có thể xóa người dùng thường</p>
-                            </>
-                        ) : (
-                            <>
-                                <p>Bạn có chắc chắn muốn xóa người dùng này không?</p>
-                                <p style={{ color: '#ff4d4f', fontWeight: '500', marginTop: '10px' }}>
-                                    ⚠️ Cảnh báo: Tất cả đơn hàng của người dùng này cũng sẽ bị xóa!
-                                </p>
-                            </>
-                        )}
-                    </div>
-                </Loading>
-            </ModalComponent>
         </div>
     )
 };

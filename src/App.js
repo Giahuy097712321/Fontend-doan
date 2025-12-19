@@ -71,10 +71,23 @@ function App() {
     }
   }
 
-  const handleCloseDemoNotice = () => {
+  const handleCloseDemoNotice = async () => {
     setShowDemoNotice(false)
     // Lưu vào sessionStorage để không hiển thị lại trong session này
     sessionStorage.setItem('hasSeenDemoNotice', 'true')
+
+    // Fetch user details immediately so we don't need a full page reload
+    setIsLoading(true)
+    try {
+      const { storageData, decoded } = handleDecoded()
+      if (decoded?.id && storageData) {
+        await handleGetDetailsUser(decoded?.id, storageData)
+      }
+    } catch (err) {
+      console.error('Error fetching user after closing demo notice', err)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (

@@ -486,6 +486,7 @@ const AdminOrder = () => {
                         data={dataTable}
                         isLoading={isLoadingOrders}
                         scroll={{ x: 1200 }}
+                        showSelection={false} // Ẩn checkbox chọn nhiều
                     />
                 ) : (
                     <Empty description="Chưa có đơn hàng nào" />

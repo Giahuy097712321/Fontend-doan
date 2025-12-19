@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
 const TableComponent = (props) => {
-  const { selectionType = 'checkbox', data = [], columns = [], isLoading = false, handleDeleteManyProducts } = props;
+  const { selectionType = 'checkbox', data = [], columns = [], isLoading = false, handleDeleteManyProducts, showSelection = true } = props;
   const [rowSelectedKeys, setRowSelectedKeys] = useState([]);
 
   const handleDeleteAll = () => {
@@ -14,13 +14,16 @@ const TableComponent = (props) => {
     }
   };
 
-  const rowSelection = {
-    type: selectionType,
-    selectedRowKeys: rowSelectedKeys,
-    onChange: (selectedRowKeys, selectedRows) => {
-      setRowSelectedKeys(selectedRowKeys);
-    },
-  };
+  // Only enable rowSelection when showSelection is true
+  const rowSelection = showSelection
+    ? {
+      type: selectionType,
+      selectedRowKeys: rowSelectedKeys,
+      onChange: (selectedRowKeys, selectedRows) => {
+        setRowSelectedKeys(selectedRowKeys);
+      },
+    }
+    : null;
 
   const handleExportExcel = () => {
     if (!data || data.length === 0) return;
@@ -54,7 +57,7 @@ const TableComponent = (props) => {
 
   return (
     <Loading isLoading={isLoading}>
-      {rowSelectedKeys.length > 0 && (
+      {showSelection && rowSelectedKeys.length > 0 && (
         <div
           style={{
             background: '#1d1ddd',
@@ -78,10 +81,7 @@ const TableComponent = (props) => {
       </Button>
       <Table
         id="table-xls"
-        rowSelection={{
-          type: selectionType,
-          ...rowSelection,
-        }}
+        rowSelection={showSelection ? rowSelection : undefined}
         columns={columns}
         dataSource={data}
         {...props}
